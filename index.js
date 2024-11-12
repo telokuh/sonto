@@ -9,114 +9,120 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server Listening on PORT:", PORT);
 });
-var list = {
-   
-   };
+var url = "https://anoboy.icu"
 
-async function geturl(){
-  var html = "";
-  await axios("https://anoboy.icu/anime-list/").then((response) => {
+var $ = ""
+
+var data = ""
+function rep(str, obj) {
+  for (const x in obj) {
+    str = str.replace(new RegExp(x, 'g'), obj[x]);
+  }
+  return str;
+}
+async function geturl(x){
+
+var html = "";
+  await axios( x ).then((response) => {
   html = response.data;
-})
+ })
+return html
 
-var $ = cheerio.load( html );
+}
 
-   $("p.OnGoing a").each( function(x,y){
-   
- 
-   var url = $(this).attr("href") 
-   var tt = $(this).html()
-   //var strim =  aneps(url)
-   list["n"+x] = {}
+function rex(x,y,z,a){
 
-   
-   if( x > 2){
-   
-   return false }
-   
-console.log("ok")
-	  
+if( a == "ok"){
 
-async function aneps() {
-
-	  var html = "";
-
-  await axios(url).then((response) => {
-  html = response.data;
-})
-
-   var $ = cheerio.load( html );
-
-	
-	var a = "";
-	
-		
-    $("ul.lcp_catlist a:contains('[')").remove()
-    /*
-	  if( $("span.pages").html() != null ){
-	    var f = $("span.pages").text().slice(-1)
-	    for(var i = 0;i <= f; i++){
-	  	$ = Cheerio.load(geturl(x+"page/"+i), null, false);
-	
-		$("div.column-content a:contains('[')").remove()
-	
-		
-	$("div.column-content a").each( function(i,va){
+         $(x).each( function(){
+          if( $(this).attr(y) != undefined){
+             if( !$(this).attr(y).startsWith("http") ){
     
-    if($(this).find("h3").html() != null ){
+                 $(this).attr(y , z+$(this).attr(y) )
     
-  a += `\n<div class="col-4"><button class="eps btn border text-center text-truncate p-1" data-eps="${  $(this).attr("href") }">
-    Episode ${ $(this).find("h3").html().split("Episode ")[1] }
-    </button></div>\n`
+             } else {
+             
+             let qq = $(this).attr(y).replace(url, "http://localhost:3000")
+             $(this).attr(y , qq )
+             
+             }
+          }
+      })
+      
+      } else {
+
+      $(x).each( function(){
+          if( $(this).attr(y) != undefined){
+             if( !$(this).attr(y).startsWith("http") ){
+    
+                 $(this).attr(y , z+$(this).attr(y) )
+    
+             }
+          }
+      })
     }
-      
-      
-     
-    })
-	  }
-	  } else {
-	  */
-	  $("ul.lcp_catlist a").each(function(i,va){
-
-        if( $(this).html() != null ){
-  a += `\n<div class="col-4"><button class="eps btn border text-center text-truncate p-1" data-eps="${  $(this).attr("href") }">
-    Episode ${ $(this).html().split("Episode ")[1] }
-    </button></div>\n`
-   }
-      
-     
-    })
-	  // }
-	  
-	
-	var strim = `
-    cback({ 
-            "eps": ${ JSON.stringify(a) },
-            
-          });
-    `
+  }
     
-       list["n"+x][tt] = {url,strim}
+function core(){
+
+    $("script[type='application/ld+json'], div[id^='ad'], #judi, #judi2, #disqus_thread, .sidebar, #coloma").remove()
+    rex("link", "href", url)
+    rex("script", "src", url)
+    rex("img", "src" ,url)
+    rex("amp-img", "src" ,url)
+    rex("iframe", "src" ,url)
+    rex( "a", "href" , "http://localhost:3000","ok")
+  $(".footercopyright").append(`
+  <style>
+  #menu,   div.column-three-fourth  { width:100% !important;
+           overflow: hidden;
+          }
+
+  
+  </style>
+  `)
 }
 
-
-console.log(tt)
-
-aneps()
-})
-
-}
-geturl()
 
 app.get("/", async (req, res) => {
+    $ = cheerio.load( await geturl( url ) );
+    core()
+    /*
+    $("link").each( function(){
+    
+    if( !$(this).attr("href").startsWith("https:") ){
+    
+    $(this).attr("href" , url+$(this).attr("href") )
+    
+    }
+    
+    })
+    */
+
     try {
-      //const data = await $.html();
-      return res.status(200).json(
-        list
+      
+      return res.status(200).send(
+         $.html()
       );
     } catch (err) {
       return res.status(500).json({
         err: err.toString(),
       });
     }
+});
+
+app.get('/:key*', async (req, res) => {
+
+   var j = url+"/"+req.params.key+req.params[0]
+   
+   $ = cheerio.load( await geturl( j ),null, false );
+   core()
+  
+  try {
+
+    res.send( $.html() );
+  } catch (error) {
+    console.error(error);
+    res.status(500).send(req.params);
+  }
 });
