@@ -1,4 +1,4 @@
-
+# .github/workflows/mediafire_downloader.yml
 name: MediaFire Downloader
 
 on:
@@ -26,6 +26,7 @@ jobs:
         # Tidak perlu menginstal chromedriver secara manual berkat webdriver-manager
 
     - name: Set MediaFire URL as environment variable
+      id: set_url # Berikan ID agar bisa direferensikan
       run: |
         # Ganti 'YOUR_MEDIAFIRE_URL_HERE' dengan URL MediaFire sebenarnya
         # Atau, Anda bisa menggunakan GitHub Secrets untuk menyimpan URL sensitif
@@ -34,11 +35,7 @@ jobs:
 
     - name: Run MediaFire Downloader Script
       run: python download_mediafire.py
-      env:
-        # Anda dapat meneruskan URL unduhan melalui environment variable
-        # yang kita set di step sebelumnya
-        # Variabel MEDIAFIRE_URL sudah tersedia di environment step ini
-
+      
     - name: Upload Download Link (Optional)
       # Langkah ini opsional. Jika script berhasil, ia akan membuat file download_link.txt.
       # Anda dapat mengunggahnya sebagai artefak dari workflow.
