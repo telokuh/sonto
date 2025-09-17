@@ -46,10 +46,10 @@ try:
     # Dapatkan URL unduhan sebelum mengklik (terkadang URL sudah tersedia di atribut href)
     # Jika tidak, Anda perlu mengklik tombolnya terlebih dahulu.
     # Mari kita coba mengambil URL sebelum mengklik, jika itu adalah link unduhan langsung.
-    #download_url = download_button.get_attribute("href")
+    download_url_d = download_button.get_attribute("href")
     download_url = driver.current_url
-    if download_url:
-        print(f"URL Unduhan Ditemukan: {download_url}")
+    if download_url_d:
+        print(f"URL Unduhan Ditemukan: {download_url_d}")
         # Simpan URL unduhan ke file
         with open("download_link.txt", "w") as f:
             f.write(download_url)
@@ -67,8 +67,8 @@ try:
 
         # Cek apakah URL akhir adalah URL unduhan yang valid
         if "download" in final_url:
-            download_url = final_url
-            print(f"URL Unduhan Ditemukan setelah klik: {download_url}")
+            download_url_d = final_url
+            print(f"URL Unduhan Ditemukan setelah klik: {download_url_d}")
             with open("download_link.txt", "w") as f:
                 f.write(download_url)
             print("URL unduhan telah disimpan ke download_link.txt")
