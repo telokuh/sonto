@@ -27,13 +27,6 @@ try:
     print(f"Mengunjungi: {mediafire_page_url}")
     driver.get(mediafire_page_url)
 
-    # Tunggu hingga tombol unduh muncul dan bisa diklik
-    # Anda mungkin perlu menyesuaikan selector ini tergantung struktur halaman MediaFire
-    # Selector ini mencari elemen 'a' (link) yang memiliki atribut href mengandung '/download/'
-    # dan juga memiliki teks atau class tertentu yang menandakan tombol unduh utama.
-    # KESALAHAN UMUM: Menggunakan selector yang salah untuk tombol unduh.
-    # Selector berikut adalah tebakan yang baik berdasarkan pengalaman umum.
-    # Jika gagal, Anda perlu memeriksa elemen di browser dan mendapatkan selector yang tepat.
 
     download_button_selector = "a[id*='downloadButton']" # Mencari link yang mengarah ke '/download/'
 
@@ -42,7 +35,7 @@ try:
         EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
     )
     download_button.click()
-    time.sleep(5)
+    time.sleep(2)
     # Dapatkan URL unduhan sebelum mengklik (terkadang URL sudah tersedia di atribut href)
     # Jika tidak, Anda perlu mengklik tombolnya terlebih dahulu.
     # Mari kita coba mengambil URL sebelum mengklik, jika itu adalah link unduhan langsung.
@@ -54,27 +47,6 @@ try:
         with open("download_link.txt", "w") as f:
             f.write(download_url)
         print("URL unduhan telah disimpan ke download_link.txt")
-    else:
-        print("Tidak dapat menemukan URL unduhan langsung di tombol. Mencoba mengklik tombol...")
-        # Jika href kosong atau bukan URL unduhan langsung, klik tombolnya
-        download_button.click()
-
-        # Setelah mengklik, halaman mungkin akan mengarahkan ke URL unduhan sebenarnya
-        # Kita perlu menunggu sebentar dan memeriksa URL halaman saat ini
-        time.sleep(5) # Beri waktu untuk navigasi
-        final_url = driver.current_url
-        print(f"URL Akhir Setelah Klik: {final_url}")
-
-        # Cek apakah URL akhir adalah URL unduhan yang valid
-        if "download" in final_url:
-            download_url_d = final_url
-            print(f"URL Unduhan Ditemukan setelah klik: {download_url_d}")
-            with open("download_link.txt", "w") as f:
-                f.write(download_url)
-            print("URL unduhan telah disimpan ke download_link.txt")
-        else:
-            print("Error: Setelah mengklik tombol, tidak dapat menemukan URL unduhan yang valid.")
-            print(f"URL saat ini: {final_url}")
 
 except Exception as e:
     print(f"Terjadi kesalahan: {e}")
