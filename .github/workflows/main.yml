@@ -30,7 +30,7 @@ jobs:
       run: |
         # Ganti 'YOUR_MEDIAFIRE_URL_HERE' dengan URL MediaFire sebenarnya
         # Atau, Anda bisa menggunakan GitHub Secrets untuk menyimpan URL sensitif
-        echo "MEDIAFIRE_URL=https://www.mediafire.com/file/your_file_id/your_filename.zip/file" >> $GITHUB_ENV
+        echo "MEDIAFIRE_URL=https://www.mediafire.com/file_premium/dwa3274aece6bax/GH-Saves_Part4_v0.54and-up.zip/file" >> $GITHUB_ENV
         # Pastikan Anda mengganti URL ini dengan yang benar!
 
     - name: Run MediaFire Downloader Script
