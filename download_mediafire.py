@@ -41,7 +41,7 @@ try:
     download_button = WebDriverWait(driver, 20).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
     )
-    driver.execute_script("arguments[0].click();", download_button_selector)
+    download_button.click()
     time.sleep(5)
     # Dapatkan URL unduhan sebelum mengklik (terkadang URL sudah tersedia di atribut href)
     # Jika tidak, Anda perlu mengklik tombolnya terlebih dahulu.
