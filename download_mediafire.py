@@ -1,85 +1,55 @@
 import os
+import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
 
-# Dapatkan URL halaman MediaFire dari environment variable
-mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
+# Ambil URL MediaFire dari environment variable
+mediafire_url = os.environ.get('MEDIAFIRE_URL')
 
-if not mediafire_page_url:
-    print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
+if not mediafire_url:
+    print("Error: MEDIAFIRE_URL environment variable not set.")
     exit(1)
 
 # Konfigurasi Selenium
+# webdriver-manager akan otomatis mengunduh ChromeDriver yang sesuai
 service = Service(ChromeDriverManager().install())
-options = webdriver.ChromeOptions()
-options.add_argument('--headless') # Jalankan di background tanpa membuka browser
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-
-driver = webdriver.Chrome(service=service, options=options)
+driver = webdriver.Chrome(service=service)
 
 try:
-    print(f"Mengunjungi: {mediafire_page_url}")
-    driver.get(mediafire_page_url)
+    print(f"Membuka URL: {mediafire_url}")
+    driver.get(mediafire_url)
+    time.sleep(5) # Beri waktu halaman untuk memuat sepenuhnya
 
-    # Tunggu hingga tombol unduh muncul dan bisa diklik
-    # Anda mungkin perlu menyesuaikan selector ini tergantung struktur halaman MediaFire
-    # Selector ini mencari elemen 'a' (link) yang memiliki atribut href mengandung '/download/'
-    # dan juga memiliki teks atau class tertentu yang menandakan tombol unduh utama.
-    # KESALAHAN UMUM: Menggunakan selector yang salah untuk tombol unduh.
-    # Selector berikut adalah tebakan yang baik berdasarkan pengalaman umum.
-    # Jika gagal, Anda perlu memeriksa elemen di browser dan mendapatkan selector yang tepat.
+    # Cari tombol unduh berdasarkan ID 'downloadButton'
+    # Kadang ID ini bisa berubah, jadi pastikan ini selector yang valid
+    download_button = driver.find_element(By.ID, 'downloadButton')
+    print("Tombol unduh ditemukan. Mengklik tombol...")
 
-    download_button_selector = "a[id*='downloadButton']" # Mencari link yang mengarah ke '/download/'
+    # Klik tombol unduh
+    download_button.click()
+    time.sleep(5) # Beri waktu URL unduhan muncul setelah klik
 
-    # Tunggu hingga tombol unduh terlihat dan dapat diklik
-    download_button = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-    )
+    # Cari elemen yang berisi link unduhan setelah tombol diklik
+    # Anda mungkin perlu memeriksa struktur HTML halaman setelah klik untuk selector yang tepat.
+    # Saya berasumsi link ada di dalam tag <a> dengan atribut 'href' yang bukan 'javascript:void(0)'
+    download_link_element = driver.find_element(By.XPATH, "//a[@href and @href!='javascript:void(0)']")
+    direct_download_url = download_link_element.get_attribute('href')
 
-    # Dapatkan URL unduhan sebelum mengklik (terkadang URL sudah tersedia di atribut href)
-    # Jika tidak, Anda perlu mengklik tombolnya terlebih dahulu.
-    # Mari kita coba mengambil URL sebelum mengklik, jika itu adalah link unduhan langsung.
-    download_url = download_button.get_attribute("href")
+    if direct_download_url:
+        print(f"URL Unduhan Langsung Ditemukan: {direct_download_url}")
 
-    if download_url:
-        print(f"URL Unduhan Ditemukan: {download_url}")
-        # Simpan URL unduhan ke file
+        # Simpan URL unduhan ke file download_link.txt
         with open("download_link.txt", "w") as f:
-            f.write(download_url)
+            f.write(direct_download_url)
         print("URL unduhan telah disimpan ke download_link.txt")
     else:
-        print("Tidak dapat menemukan URL unduhan langsung di tombol. Mencoba mengklik tombol...")
-        # Jika href kosong atau bukan URL unduhan langsung, klik tombolnya
-        download_button.click()
-
-        # Setelah mengklik, halaman mungkin akan mengarahkan ke URL unduhan sebenarnya
-        # Kita perlu menunggu sebentar dan memeriksa URL halaman saat ini
-        time.sleep(5) # Beri waktu untuk navigasi
-        final_url = driver.current_url
-        print(f"URL Akhir Setelah Klik: {final_url}")
-
-        # Cek apakah URL akhir adalah URL unduhan yang valid
-        if "/download/" in final_url:
-            download_url = final_url
-            print(f"URL Unduhan Ditemukan setelah klik: {download_url}")
-            with open("download_link.txt", "w") as f:
-                f.write(download_url)
-            print("URL unduhan telah disimpan ke download_link.txt")
-        else:
-            print("Error: Setelah mengklik tombol, tidak dapat menemukan URL unduhan yang valid.")
-            print(f"URL saat ini: {final_url}")
+        print("Tidak dapat menemukan URL unduhan langsung setelah mengklik tombol.")
 
 except Exception as e:
-    print(f"Terjadi kesalahan: {e}")
-    # Jika ada error, cetak screenshot untuk debugging
-    driver.save_screenshot("error_screenshot.png")
-    print("Screenshot error_screenshot.png telah dibuat.")
-    exit(1)
+    print(f"Terjadi error: {e}")
+
 finally:
+    print("Menutup browser...")
     driver.quit()
