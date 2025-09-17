@@ -6,7 +6,7 @@ on:
       - main # Atau branch lain yang Anda inginkan untuk memicu workflow
 
 jobs:
-  download_file:
+  download_and_release:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,16 +29,33 @@ jobs:
         # Ini adalah URL yang mengarah ke halaman file, BUKAN tautan unduhan langsung.
         # Contoh: https://www.mediafire.com/file/xyz123/namafile.zip/file
         echo "MEDIAFIRE_PAGE_URL=https://www.mediafire.com/file_premium/dwa3274aece6bax/GH-Saves_Part4_v0.54and-up.zip/file" >> $GITHUB_ENV
-        # Pastikan Anda mengganti URL ini dengan yang benar!
 
     - name: Run MediaFire Downloader Script
       run: python download_mediafire.py
       # Skrip Python akan membaca MEDIAFIRE_PAGE_URL dari environment variable
-      # yang diatur di step sebelumnya.
+      # dan menyimpan URL unduhan ke 'download_link.txt'.
 
-    - name: Upload Download Link (Optional)
-      uses: actions/upload-artifact@v4
+    - name: Get Download URL and Download File
+      id: download_file
+      run: |
+        # Baca URL dari file yang dibuat oleh skrip Python
+        DOWNLOAD_URL=$(cat download_link.txt)
+        # Ambil nama file dari URL
+        FILE_NAME=$(basename "$DOWNLOAD_URL")
+        # Unduh file menggunakan wget
+        wget -O "$FILE_NAME" "$DOWNLOAD_URL"
+        # Simpan nama file ke output untuk langkah selanjutnya
+        echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: mediafire-download-link
-        path: download_link.txt
-        retention-days: 5
+        tag_name: release-${{ github.run_number }}
+        name: Automatic MediaFire Download ${{ github.run_number }}
+        body: |
+          Rilis otomatis dari MediaFire.
+          File: ${{ steps.download_file.outputs.file_name }}
+        files: ${{ steps.download_file.outputs.file_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
