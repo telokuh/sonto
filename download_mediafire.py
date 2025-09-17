@@ -6,7 +6,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Ambil URL MediaFire dari environment variable
-mediafire_url = os.environ.get('MEDIAFIRE_URL')
+mediafire_url = os.environ.get('MEDIAFIRE_PAGE_URL')
 
 if not mediafire_url:
     print("Error: MEDIAFIRE_URL environment variable not set.")
