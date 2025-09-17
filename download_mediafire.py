@@ -31,7 +31,7 @@ try:
     download_button_selector = "a[id*='downloadButton']" # Mencari link yang mengarah ke '/download/'
 
     # Tunggu hingga tombol unduh terlihat dan dapat diklik
-    download_button = WebDriverWait(driver, 20).until(
+    download_button = WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
     )
     download_button.click()
@@ -40,12 +40,12 @@ try:
     # Jika tidak, Anda perlu mengklik tombolnya terlebih dahulu.
     # Mari kita coba mengambil URL sebelum mengklik, jika itu adalah link unduhan langsung.
     download_url_d = download_button.get_attribute("href")
-    download_url = driver.current_url
+    
     if download_url_d:
         print(f"URL Unduhan Ditemukan: {download_url_d}")
         # Simpan URL unduhan ke file
         with open("download_link.txt", "w") as f:
-            f.write(download_url)
+            f.write(download_url_d)
         print("URL unduhan telah disimpan ke download_link.txt")
 
 except Exception as e:
