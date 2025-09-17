@@ -8,6 +8,8 @@ on:
 jobs:
   download_and_release:
     runs-on: ubuntu-latest
+    permissions: # <-- Add this block
+      contents: write
 
     steps:
     - name: Checkout code
