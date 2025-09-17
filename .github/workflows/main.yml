@@ -41,6 +41,11 @@ jobs:
     - name: Run MediaFire Downloader Script
       run: python download_mediafire.py
 
+    - name: Install GitHub CLI
+      uses: actions/setup-cli@v1
+      with:
+        gh-version: 2.39.0 # Anda bisa menggunakan versi terbaru yang stabil
+
     - name: Get Download URL and Filename
       id: get_filename
       run: |
@@ -54,9 +59,26 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Menggunakan GitHub CLI untuk mendapatkan URL unduhan dari rilis terbaru
-        RELEASE_URL=$(gh release view --json assets -q ".assets[] | select(.name == \"${{ steps.get_filename.outputs.file_name }}\") | .url")
-        if [ -n "$RELEASE_URL" ]; then
+        # Otentikasi GitHub CLI
+        gh auth login --with-token <<< "$GH_TOKEN"
+        # Dapatkan ID rilis terbaru (biasanya yang memiliki tag 'latest')
+        LATEST_RELEASE_ID=$(gh release list --json id --jq 'map(select(.tag_name | contains("latest")))[0].id // ""')
+
+        if [ -z "$LATEST_RELEASE_ID" ]; then
+          echo "Tidak ada rilis 'latest' yang ditemukan. Membuat rilis baru."
+          LATEST_RELEASE_ID=$(gh release create release-latest --title "Latest Release" --notes "Auto-generated release" --public --yes)
+          echo "Created new release ID: $LATEST_RELEASE_ID"
+        else
+          echo "Rilis 'latest' ditemukan dengan ID: $LATEST_RELEASE_ID"
+        fi
+        echo "release_id=$LATEST_RELEASE_ID" >> $GITHUB_OUTPUT
+
+        # Periksa apakah file sudah ada di rilis yang ditemukan/dibuat
+        # Perintah ini akan mengembalikan 0 jika file ditemukan, dan non-zero jika tidak
+        gh release assets $LATEST_RELEASE_ID | grep -q "${{ steps.get_filename.outputs.file_name }}"
+        FILE_EXISTS=$?
+
+        if [ $FILE_EXISTS -eq 0 ]; then
           echo "File ${{ steps.get_filename.outputs.file_name }} sudah ada di rilis. Melewati pengunggahan."
           echo "skip=true" >> $GITHUB_OUTPUT
         else
@@ -73,15 +95,12 @@ jobs:
         wget -O "$FILE_NAME" "$DOWNLOAD_URL"
       shell: bash
 
-    - name: Create GitHub Release
+    - name: Upload file to the latest release
       if: steps.check_release.outputs.skip == 'false'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: release-${{ github.run_number }}
-        name: Automatic MediaFire Download ${{ github.run_number }}
-        body: |
-          Rilis otomatis dari MediaFire.
-          File: ${{ steps.get_filename.outputs.file_name }}
-        files: ${{ steps.get_filename.outputs.file_name }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_ID: ${{ steps.check_release.outputs.release_id }}
+        FILE_TO_UPLOAD: ${{ steps.get_filename.outputs.file_name }}
+      run: |
+        gh release upload $RELEASE_ID $FILE_TO_UPLOAD
+      shell: bash
