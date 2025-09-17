@@ -35,7 +35,7 @@ try:
     # Selector berikut adalah tebakan yang baik berdasarkan pengalaman umum.
     # Jika gagal, Anda perlu memeriksa elemen di browser dan mendapatkan selector yang tepat.
 
-    download_button_selector = "a[href*='/download/']" # Mencari link yang mengarah ke '/download/'
+    download_button_selector = "a[id*='downloadButton']" # Mencari link yang mengarah ke '/download/'
 
     # Tunggu hingga tombol unduh terlihat dan dapat diklik
     download_button = WebDriverWait(driver, 20).until(
