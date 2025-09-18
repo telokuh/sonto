@@ -21,11 +21,12 @@ if not mediafire_page_url:
     exit(1)
 
 def send_telegram_message(message_text):
-    """Fungsi untuk mengirim pesan ke Telegram."""
+    """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
         print("Peringatan: BOT_TOKEN atau OWNER_ID tidak diatur. Notifikasi Telegram dinonaktifkan.")
-        return
+        return None
     
+    # Gunakan format yang tidak akan terdeteksi sebagai URL
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": OWNER_ID,
@@ -33,9 +34,30 @@ def send_telegram_message(message_text):
         "parse_mode": "Markdown"
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
+        return response.json().get('result', {}).get('message_id')
     except Exception as e:
         print(f"Gagal mengirim pesan Telegram: {e}")
+        return None
+
+def edit_telegram_message(message_id, message_text):
+    """Fungsi untuk mengedit pesan yang sudah ada di Telegram."""
+    if not BOT_TOKEN or not OWNER_ID or not message_id:
+        print("Peringatan: Tidak bisa mengedit pesan. Notifikasi Telegram dinonaktifkan.")
+        return
+    
+    # Gunakan format yang tidak akan terdeteksi sebagai URL
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
+    payload = {
+        "chat_id": OWNER_ID,
+        "message_id": message_id,
+        "text": message_text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Gagal mengedit pesan Telegram: {e}")
 
 def get_download_url_with_yt_dlp(url):
     print("Mencoba mendapatkan URL unduhan dengan yt-dlp...")
@@ -84,7 +106,7 @@ def get_download_url_with_selenium(url):
         else:
             download_button.click()
             time.sleep(3)
-            final_url = driver.current_url()
+            final_url = driver.current_url
             if final_url != url:
                 print("Selenium berhasil menemukan URL redirect.")
                 return final_url
@@ -112,13 +134,24 @@ def download_file(url):
         
         if len(filename.split('.')) < 2:
             filename = "downloaded_file" + os.path.splitext(url)[-1]
-        
-        send_telegram_message(f"⬇️ **Mulai mengunduh file...**\nNama file: ")
-        print(f"Mulai mengunduh file: {filename}")
-        
+
+        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `0%`"
+        message_id = send_telegram_message(initial_message)
+
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded_size = 0
+        last_percent_notified = 0
+
         with open(filename, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
+                downloaded_size += len(chunk)
+                if total_size > 0:
+                    current_percent = int(downloaded_size / total_size * 100)
+                    if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                        last_percent_notified = current_percent
+                        progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `{current_percent}%`"
+                        edit_telegram_message(message_id, progress_message)
         
         print(f"File berhasil diunduh sebagai: {filename}")
         return filename
@@ -128,6 +161,9 @@ def download_file(url):
         return None
 
 # --- Logika Utama ---
+# Gunakan format yang tidak akan terdeteksi sebagai URL
+formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
+send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
 
 download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
