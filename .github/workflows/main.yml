@@ -41,7 +41,9 @@ jobs:
     - name: Set MediaFire Page URL as environment variable
       run: |
         echo "MEDIAFIRE_PAGE_URL=${{ github.event.client_payload.url }}" >> $GITHUB_ENV
-
+        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}"
+        echo "OWNER_ID=${{ vars.OWNER_ID }}"
+        
     - name: Run MediaFire Downloader Script
       run: python mediafire_downloader.py
       env:
