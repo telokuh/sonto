@@ -8,6 +8,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import json
+import re
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -15,6 +17,9 @@ OWNER_ID = os.environ.get("OWNER_ID")
 
 # Dapatkan URL halaman MediaFire dari environment variable
 mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
+
+# Regex untuk mendeteksi URL YouTube
+YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
 
 if not mediafire_page_url:
     print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
@@ -26,7 +31,6 @@ def send_telegram_message(message_text):
         print("Peringatan: BOT_TOKEN atau OWNER_ID tidak diatur. Notifikasi Telegram dinonaktifkan.")
         return None
     
-    # Gunakan format yang tidak akan terdeteksi sebagai URL
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": OWNER_ID,
@@ -46,7 +50,6 @@ def edit_telegram_message(message_id, message_text):
         print("Peringatan: Tidak bisa mengedit pesan. Notifikasi Telegram dinonaktifkan.")
         return
     
-    # Gunakan format yang tidak akan terdeteksi sebagai URL
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
     payload = {
         "chat_id": OWNER_ID,
@@ -59,12 +62,17 @@ def edit_telegram_message(message_id, message_text):
     except Exception as e:
         print(f"Gagal mengedit pesan Telegram: {e}")
 
-def get_download_url_with_yt_dlp(url):
+def get_download_url_with_yt_dlp(url, cookies_file=None):
     print("Mencoba mendapatkan URL unduhan dengan yt-dlp...")
     send_telegram_message("⏳ **Mencari URL unduhan...**\n`yt-dlp` sedang mencoba memproses link.")
+    
+    command = ['yt-dlp', '--get-url', '--no-warnings', '--rm-cache-dir', url]
+    if cookies_file and os.path.exists(cookies_file):
+        command.extend(['--cookies', cookies_file])
+    
     try:
         result = subprocess.run(
-            ['yt-dlp', '--get-url', url],
+            command,
             capture_output=True,
             text=True,
             check=True
@@ -75,6 +83,7 @@ def get_download_url_with_yt_dlp(url):
             return download_url
     except subprocess.CalledProcessError as e:
         print(f"yt-dlp gagal: {e.stderr.strip()}")
+        send_telegram_message(f"❌ `yt-dlp` gagal memproses URL.\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
         print("yt-dlp tidak ditemukan.")
     
@@ -121,6 +130,33 @@ def get_download_url_with_selenium(url):
     finally:
         driver.quit()
 
+def get_cookies_from_selenium(url):
+    print("Mendapatkan cookies dari Selenium sebagai cadangan...")
+    cookies_file = "cookies.json"
+    try:
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+        time.sleep(5)  # Beri waktu untuk memuat cookies
+
+        cookies = driver.get_cookies()
+        with open(cookies_file, 'w') as f:
+            json.dump(cookies, f)
+        
+        print("Cookies berhasil disimpan.")
+        return cookies_file
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mendapatkan cookies dengan Selenium: {e}")
+        driver.save_screenshot("error_screenshot_cookies.png")
+        return None
+    finally:
+        driver.quit()
+
 def download_file(url):
     try:
         response = requests.get(url, stream=True)
@@ -161,13 +197,24 @@ def download_file(url):
         return None
 
 # --- Logika Utama ---
-# Gunakan format yang tidak akan terdeteksi sebagai URL
 formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
 send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
 
-download_url = get_download_url_with_yt_dlp(mediafire_page_url)
+# Logika baru: deteksi URL YouTube
+is_youtube_url = re.match(YOUTUBE_URL_REGEX, mediafire_page_url)
+
+download_url = None
+
+if is_youtube_url:
+    send_telegram_message("🔗 URL YouTube terdeteksi. Mencoba mendapatkan cookies dengan Selenium...")
+    cookies_file = get_cookies_from_selenium("https://www.youtube.com")
+    if cookies_file:
+        download_url = get_download_url_with_yt_dlp(mediafire_page_url, cookies_file)
+else:
+    download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
 if not download_url:
+    # Jika yt-dlp gagal, gunakan Selenium untuk mendapatkan URL MediaFire
     download_url = get_download_url_with_selenium(mediafire_page_url)
 
 if download_url:
