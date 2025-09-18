@@ -113,7 +113,7 @@ def download_file(url):
         if len(filename.split('.')) < 2:
             filename = "downloaded_file" + os.path.splitext(url)[-1]
         
-        send_telegram_message(f"⬇️ **Mulai mengunduh file...**\nNama file: `{filename}`")
+        send_telegram_message(f"⬇️ **Mulai mengunduh file...**\nNama file: ")
         print(f"Mulai mengunduh file: {filename}")
         
         with open(filename, 'wb') as f:
