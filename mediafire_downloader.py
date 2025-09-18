@@ -128,7 +128,7 @@ def download_file(url):
         return None
 
 # --- Logika Utama ---
-send_telegram_message(f"🔍 **Mulai memproses URL:**\n`{mediafire_page_url}`")
+
 download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
 if not download_url:
