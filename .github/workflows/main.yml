@@ -50,27 +50,9 @@ jobs:
         echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
       shell: bash
 
-    - name: Check if file already exists in latest release
-      id: check_release
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Menggunakan GitHub CLI untuk mendapatkan URL unduhan dari rilis terbaru
-        RELEASE_URL=$(gh release view --json assets -q ".assets[] | select(.name == \"${{ steps.get_filename.outputs.file_name }}\") | .url")
-        if [ -n "$RELEASE_URL" ]; then
-          echo "File ${{ steps.get_filename.outputs.file_name }} sudah ada di rilis. Melewati pengunggahan."
-          echo "skip=true" >> $GITHUB_OUTPUT
-        else
-          echo "File belum ada. Melanjutkan pengunduhan dan pengunggahan."
-          echo "skip=false" >> $GITHUB_OUTPUT
-        fi
-      shell: bash
-
     - name: Download File if not already released
-      if: steps.check_release.outputs.skip == 'false'
       run: |
         DOWNLOAD_URL=$(cat download_link.txt)
-        FILE_NAME=${{ steps.get_filename.outputs.file_name }}
         wget -O "$FILE_NAME" "$DOWNLOAD_URL"
       shell: bash
 
