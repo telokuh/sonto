@@ -84,7 +84,7 @@ def get_download_url_with_selenium(url):
         else:
             download_button.click()
             time.sleep(5)
-            final_url = driver.current_url
+            final_url = download_url
             if final_url != url:
                 print("Selenium berhasil menemukan URL redirect.")
                 return final_url
