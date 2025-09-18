@@ -5,10 +5,10 @@ WORKDIR /app
 
 # Menyalin file requirements.txt ke dalam container
 # File ini berisi daftar pustaka yang dibutuhkan bot
-COPY requirements.txt .
+COPY oke.txt .
 
 # Menginstal pustaka yang terdaftar di requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r oke.txt
 
 # Menyalin semua file lain dari direktori lokal ke dalam container
 # Ini termasuk bot.py dan .env
