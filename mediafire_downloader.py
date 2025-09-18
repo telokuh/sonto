@@ -75,7 +75,7 @@ def get_download_url_with_selenium(url):
         download_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
-        
+        download_button.click()
         download_url = download_button.get_attribute("href")
         
         if download_url and download_url.startswith("http"):
@@ -83,8 +83,8 @@ def get_download_url_with_selenium(url):
             return download_url
         else:
             download_button.click()
-            time.sleep(5)
-            final_url = download_url
+            time.sleep(3)
+            final_url = driver.current_url()
             if final_url != url:
                 print("Selenium berhasil menemukan URL redirect.")
                 return final_url
