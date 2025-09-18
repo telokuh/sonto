@@ -46,9 +46,9 @@ URL_REGEX = r"https?://(?:www\.)?[\w\d\-_]+\.\w+(?:/[\w\d\-_.~:/?#\[\]@!$&'()*+,
 @pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
 async def handle_url(client, message):
     text = message.text
-    urls = re.findall(URL_REGEX, text)
+    urls = text
 
-    if urls:
+    if urls.includes("http"):
         await message.reply_text("URL terdeteksi. Meneruskan ke GitHub Actions...")
         
         for url in urls:
