@@ -43,7 +43,7 @@ def run_flask():
 # Regex untuk mendeteksi URL
 URL_REGEX = r"https?://(?:www\.)?[\w\d\-_]+\.\w+(?:/[\w\d\-_.~:/?#\[\]@!$&'()*+,;=]*)?"
 
-@pyrogram_app.on_message(filters.text & filters.private)
+@pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
 async def handle_url(client, message):
     text = message.text
     urls = re.findall(URL_REGEX, text)
