@@ -10,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import json
 import re
+import tempfile
+import shutil
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -136,6 +138,9 @@ def get_download_url_with_selenium(url):
 def download_file_with_rclone(url):
     print(f"Mengunduh file dari MEGA dengan rclone: {url}")
     send_telegram_message("⬇️ **Mulai mengunduh...**\n`rclone` sedang mengunduh file.")
+    
+    # Buat direktori sementara
+    temp_dir = tempfile.mkdtemp()
 
     rclone_env = os.environ.copy()
     if RCLONE_CONFIG_PATH:
@@ -143,25 +148,21 @@ def download_file_with_rclone(url):
 
     try:
         # Jalankan rclone copyurl dan tunggu sampai selesai
-        result = subprocess.run(
-            ['rclone', 'copyurl', url, '.'],
+        subprocess.run(
+            ['rclone', 'copyurl', url, temp_dir],
             capture_output=True,
             text=True,
             check=True,
             env=rclone_env
         )
-        print(result.stdout)
         
-        # rclone berhasil, sekarang cari file yang baru diunduh
-        # Metode yang lebih andal: cari file yang baru dibuat di direktori saat ini
-        time.sleep(2) # Beri waktu sejenak
-        newly_downloaded_files = sorted([
-            f for f in os.listdir('.') if os.path.isfile(f)
-        ], key=os.path.getmtime, reverse=True)
-        
-        if newly_downloaded_files:
-            filename = newly_downloaded_files[0]
-            print(f"File berhasil diunduh sebagai: {filename}")
+        # Cari file yang baru diunduh di direktori sementara
+        downloaded_files = os.listdir(temp_dir)
+        if len(downloaded_files) == 1:
+            filename = downloaded_files[0]
+            # Pindahkan file ke direktori kerja utama
+            shutil.move(os.path.join(temp_dir, filename), '.')
+            print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
             return filename
         else:
             print("Gagal menemukan file yang baru diunduh.")
@@ -172,6 +173,9 @@ def download_file_with_rclone(url):
         send_telegram_message(f"❌ **`rclone` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
         print("rclone tidak ditemukan.")
+    finally:
+        # Hapus direktori sementara
+        shutil.rmtree(temp_dir, ignore_errors=True)
     
     return None
 
