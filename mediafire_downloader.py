@@ -303,7 +303,7 @@ def get_download_url_from_pixeldrain(url):
 
         # Temukan tombol unduh
         download_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn.btn-primary.download-link"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "button.button_highlight"))
         )
         
         # Klik tombol unduh
