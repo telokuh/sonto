@@ -1,7 +1,7 @@
 #!/bin/bash
 pip install requests pyrogram python-dotenv
 # Periksa apakah variabel lingkungan $URL mengandung "mediafire"
-if [[ "$URL" == *"mediafire"* ]]; then
+if [[ "$URL" == *"mediafire"* || "$URL" == *"gofile"* ]]; then
     echo "URL mengandung 'mediafire'. Menjalankan pip install selenium..."
     pip install selenium webdriver-manager
 # Jika tidak, periksa apakah mengandung "mega"
