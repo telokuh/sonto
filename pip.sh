@@ -7,7 +7,7 @@ if [[ "$URL" == *"mediafire"* || "$URL" == *"gofile"* ]]; then
 # Jika tidak, periksa apakah mengandung "mega"
 elif [[ "$URL" == *"mega"* ]]; then
     echo "URL mengandung 'mega'. Menjalankan pip install mega..."
-    pip install mega
+    sudo dpkg -i ./megatools_cache/megatools_*.deb
     
 elif [[ "$URL" == *"pixeldrain"* ]]; then
     echo "URL pixel"
