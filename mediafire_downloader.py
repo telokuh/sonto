@@ -381,6 +381,9 @@ download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
 if download_url:
     downloaded_filename = download_file(download_url)
+elif is_pixeldrain_url:
+    downloaded_filename = get_download_url_from_pixeldrain(mediafire_page_url)
+
 elif is_mega_url:
     send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
     downloaded_filename = download_file_with_megatools(mediafire_page_url)
