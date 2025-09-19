@@ -139,40 +139,55 @@ def download_file_with_rclone(url):
     print(f"Mengunduh file dari MEGA dengan rclone: {url}")
     send_telegram_message("⬇️ **Mulai mengunduh...**\n`rclone` sedang mengunduh file.")
     
-    # Buat direktori sementara
     temp_dir = tempfile.mkdtemp()
-
     rclone_env = os.environ.copy()
     if RCLONE_CONFIG_PATH:
         rclone_env["RCLONE_CONFIG"] = RCLONE_CONFIG_PATH
 
     try:
-        # Jalankan rclone copyurl dan tunggu sampai selesai
+        # Langkah 1: Dapatkan nama file menggunakan lsjson
+        lsjson_result = subprocess.run(
+            ['rclone', 'lsjson', url],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=rclone_env
+        )
+        file_info = json.loads(lsjson_result.stdout)
+        if not file_info:
+            print("Gagal mendapatkan informasi file dari URL.")
+            return None
+        
+        filename = file_info[0].get('Path')
+        if not filename:
+            print("Gagal mendapatkan nama file dari JSON.")
+            return None
+            
+        print(f"Nama file ditemukan: {filename}")
+        
+        # Langkah 2: Gunakan rclone copy untuk mengunduh
         subprocess.run(
-            ['rclone', 'copyurl', url, temp_dir],
+            ['rclone', 'copy', url, temp_dir],
             capture_output=True,
             text=True,
             check=True,
             env=rclone_env
         )
         
-        # Cari file yang baru diunduh di direktori sementara
-        downloaded_files = os.listdir(temp_dir)
-        if len(downloaded_files) == 1:
-            filename = downloaded_files[0]
-            # Pindahkan file ke direktori kerja utama
-            shutil.move(os.path.join(temp_dir, filename), '.')
-            print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
-            return filename
-        else:
-            print("Gagal menemukan file yang baru diunduh.")
-            return None
+        # Pindahkan file dari direktori sementara ke direktori utama
+        downloaded_file_path = os.path.join(temp_dir, filename)
+        shutil.move(downloaded_file_path, '.')
+        print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
+        
+        return filename
             
     except subprocess.CalledProcessError as e:
         print(f"rclone gagal: {e.stderr.strip()}")
         send_telegram_message(f"❌ **`rclone` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
         print("rclone tidak ditemukan.")
+    except Exception as e:
+        print(f"Terjadi kesalahan: {e}")
     finally:
         # Hapus direktori sementara
         shutil.rmtree(temp_dir, ignore_errors=True)
