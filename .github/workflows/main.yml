@@ -43,7 +43,7 @@ jobs:
         run: |
           # URL yang selalu mengarah ke versi terbaru
           RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-amd64.zip"
-          
+          mkdir -p ~/bin
           # Download, unzip, dan pindahkan
           curl -sL "$RCLONE_URL" -o rclone.zip
           unzip rclone.zip
