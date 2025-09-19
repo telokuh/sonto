@@ -25,7 +25,7 @@ mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
 # Regex untuk mendeteksi URL
 YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
 MEGA_URL_REGEX = r"(?:https?://)?(?:www\.)?mega\.nz/.+"
-
+PIXELDRAIN_URL_REGEX = r"(?:https?://)?(?:www\.)?pixeldrain\.com/u/.+"
 if not mediafire_page_url:
     print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
     exit(1)
