@@ -307,11 +307,13 @@ def get_download_url_from_pixeldrain(url):
         )
         
         # Klik tombol unduh
+        print(download_button.get_attribute('outerHTML'))
+        
         print("Mengklik tombol unduh...")
         download_button.click()
         
         # Tunggu hingga file muncul di direktori unduhan dan lacak progres
-        max_wait_time = 300
+        max_wait_time = 30
         waited_time = 0
         last_percent_notified = 0
         
