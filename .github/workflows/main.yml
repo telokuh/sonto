@@ -4,7 +4,11 @@ on:
   repository_dispatch:
     types: [new_url_received]
   workflow_dispatch:
-
+    inputs:
+      url:
+        description: 'URL to download'
+        required: true
+        type: string
 jobs:
   download-and-release:
     runs-on: ubuntu-latest
