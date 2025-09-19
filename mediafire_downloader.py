@@ -13,6 +13,7 @@ import re
 import tempfile
 import shutil
 import glob
+import math
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -137,19 +138,63 @@ def get_download_url_with_selenium(url):
 
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
-    send_telegram_message("⬇️ **Mulai mengunduh...**\n`megatools` sedang mengunduh file.")
     
+    # Simpan direktori kerja saat ini
+    original_cwd = os.getcwd()
+    
+    # Buat direktori sementara
+    temp_dir = tempfile.mkdtemp()
+    
+    initial_message_id = send_telegram_message("⬇️ **Mulai mengunduh...**\n`megatools` sedang mengunduh file.")
+
     try:
-        # Jalankan megatools dan tunggu sampai selesai
-        subprocess.run(
+        # Pindah ke direktori sementara
+        os.chdir(temp_dir)
+        
+        # Jalankan megatools dan baca output secara real-time
+        process = subprocess.Popen(
             ['megatools', 'dl', url],
-            capture_output=True,
-            text=True,
-            check=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
         )
         
-        # Cari file yang diunduh
-        downloaded_files = glob.glob('*.*')
+        total_size = 0
+        last_percent_notified = 0
+
+        # Regex untuk mengekstrak persentase dan ukuran file
+        progress_regex = re.compile(r'(\d+\.\d+)%\s+of\s+.*\((\d+\.\d+)\s*(\wB)\)')
+
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            
+            # Cari persentase dan ukuran file
+            match = progress_regex.search(line)
+            if match:
+                current_percent = math.floor(float(match.group(1)))
+                current_size_str = match.group(2)
+                current_unit = match.group(3)
+
+                # Dapatkan ukuran total dari baris pertama
+                if total_size == 0:
+                    total_size = f"{current_size_str} {current_unit}"
+                    
+                # Kirim pembaruan ke Telegram setiap 10%
+                if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                    last_percent_notified = current_percent
+                    progress_message = f"⬇️ **Mulai mengunduh...**\nUkuran file: `{total_size}`\n\nProgres: `{current_percent}%`"
+                    edit_telegram_message(initial_message_id, progress_message)
+
+        # Tunggu proses selesai dan periksa kode keluarannya
+        process.wait()
+        if process.returncode != 0:
+            error_output = process.stderr.read()
+            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
+
+        # Cari file yang diunduh di direktori sementara
+        downloaded_files = os.listdir('.')
         if len(downloaded_files) == 1:
             filename = downloaded_files[0]
             print(f"File berhasil diunduh sebagai: {filename}")
@@ -164,6 +209,16 @@ def download_file_with_megatools(url):
         send_telegram_message(f"❌ **`megatools` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
         print("megatools tidak ditemukan.")
+    except Exception as e:
+        print(f"Terjadi kesalahan: {e}")
+    finally:
+        # Pindah kembali ke direktori kerja asli
+        os.chdir(original_cwd)
+        # Pindahkan file yang diunduh dari temp_dir ke direktori asli
+        if 'filename' in locals() and os.path.exists(os.path.join(temp_dir, filename)):
+            shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
+        # Hapus direktori sementara
+        shutil.rmtree(temp_dir, ignore_errors=True)
     
     return None
 
@@ -181,10 +236,12 @@ def download_file(url):
         if len(filename.split('.')) < 2:
             filename = "downloaded_file" + os.path.splitext(url)[-1]
 
-        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `0%`"
+        total_size = int(response.headers.get('content-length', 0))
+        total_size_human = human_readable_size(total_size)
+        
+        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
         message_id = send_telegram_message(initial_message)
 
-        total_size = int(response.headers.get('content-length', 0))
         downloaded_size = 0
         last_percent_notified = 0
 
@@ -196,7 +253,7 @@ def download_file(url):
                     current_percent = int(downloaded_size / total_size * 100)
                     if current_percent >= last_percent_notified + 10 or current_percent == 100:
                         last_percent_notified = current_percent
-                        progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `{current_percent}%`"
+                        progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
                         edit_telegram_message(message_id, progress_message)
         
         print(f"File berhasil diunduh sebagai: {filename}")
@@ -205,6 +262,15 @@ def download_file(url):
         print(f"Gagal mengunduh file: {e}")
         send_telegram_message(f"❌ **Gagal mengunduh file.**\n\nDetail: {str(e)[:150]}...")
         return None
+
+def human_readable_size(size_bytes):
+    if size_bytes is None or size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
 
 # --- Logika Utama ---
 formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
