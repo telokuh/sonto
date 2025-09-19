@@ -17,6 +17,8 @@ OWNER_ID = os.environ.get("OWNER_ID")
 
 # Dapatkan URL halaman dari environment variable
 mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
+# Dapatkan path config rclone dari environment variable
+RCLONE_CONFIG_PATH = os.environ.get("RCLONE_CONFIG")
 
 # Regex untuk mendeteksi URL
 YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
@@ -135,16 +137,21 @@ def get_download_url_with_selenium(url):
 def download_file_with_rclone(url):
     print(f"Mengunduh file dari MEGA dengan rclone: {url}")
     send_telegram_message("⬇️ **Mulai mengunduh...**\n`rclone` sedang mengunduh file.")
+
+    rclone_env = os.environ.copy()
+    if RCLONE_CONFIG_PATH:
+        rclone_env["RCLONE_CONFIG"] = RCLONE_CONFIG_PATH
+
     try:
         result = subprocess.run(
             ['rclone', 'copyurl', url, '.'],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            env=rclone_env
         )
         print(result.stdout)
         
-        # Mengekstrak nama file dari output rclone atau URL
         filename_match = re.search(r'Copied\s+["\']?([^"\']+)["\']?', result.stdout)
         if filename_match:
             filename = filename_match.group(1)
@@ -161,6 +168,46 @@ def download_file_with_rclone(url):
     
     return None
 
+def download_file(url):
+    # Logika untuk mengunduh dengan requests, seperti sebelumnya
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        filename = response.headers.get('Content-Disposition')
+        if filename:
+            filename = filename.split('filename=')[1].strip('"')
+        else:
+            filename = url.split('/')[-1]
+        
+        if len(filename.split('.')) < 2:
+            filename = "downloaded_file" + os.path.splitext(url)[-1]
+
+        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `0%`"
+        message_id = send_telegram_message(initial_message)
+
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded_size = 0
+        last_percent_notified = 0
+
+        with open(filename, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                downloaded_size += len(chunk)
+                if total_size > 0:
+                    current_percent = int(downloaded_size / total_size * 100)
+                    if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                        last_percent_notified = current_percent
+                        progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\n\nProgres: `{current_percent}%`"
+                        edit_telegram_message(message_id, progress_message)
+        
+        print(f"File berhasil diunduh sebagai: {filename}")
+        return filename
+    except requests.exceptions.RequestException as e:
+        print(f"Gagal mengunduh file: {e}")
+        send_telegram_message(f"❌ **Gagal mengunduh file.**\n\nDetail: {str(e)[:150]}...")
+        return None
+
 # --- Logika Utama ---
 formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
 send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
@@ -172,14 +219,11 @@ downloaded_filename = None
 download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
 if download_url:
-    # Jika yt-dlp berhasil, unduh file
     downloaded_filename = download_file(download_url)
 elif is_mega_url:
-    # Jika yt-dlp gagal dan URL-nya MEGA, gunakan rclone sebagai cadangan
     send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `rclone`...")
     downloaded_filename = download_file_with_rclone(mediafire_page_url)
 else:
-    # Jika yt-dlp gagal dan URL-nya bukan MEGA, gunakan Selenium
     download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
     if download_url_selenium:
         downloaded_filename = download_file(download_url_selenium)
