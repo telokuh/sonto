@@ -31,37 +31,17 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Cache rclone installation
-        id: cache-rclone
+      - name: Cache megatools
+        id: cache-megatools
         uses: actions/cache@v4
         with:
-          path: ~/bin/rclone
-          key: ${{ runner.os }}-rclone-v1
-          
-      - name: Install rclone (if not in cache)
-        if: steps.cache-rclone.outputs.cache-hit != 'true'
-        run: |
-          # URL yang selalu mengarah ke versi terbaru
-          RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-amd64.zip"
-          mkdir -p ~/bin
-          # Download, unzip, dan pindahkan
-          curl -sL "$RCLONE_URL" -o rclone.zip
-          unzip rclone.zip
-          
-          # Pindahkan binary ke direktori pengguna dan jadikan executable
-          mv rclone-*/rclone ~/bin/
-          chmod +x ~/bin/rclone
-          
-          echo "Rclone installed successfully"
-
-      - name: Add rclone to PATH
-        run: echo "$HOME/bin" >> $GITHUB_PATH
-
-      - name: Create rclone config file from secret
-        env:
-          RCLONE_CONFIG_SECRET: ${{ secrets.RCLONE_CONFIG_FILE }}
-        run: |
-          echo "$RCLONE_CONFIG_SECRET" > rclone.conf
+          path: /var/cache/apt/archives/
+          key: ${{ runner.os }}-megatools-v1
+          restore-keys: |
+            ${{ runner.os }}-megatools-
+      
+      - name: Install megatools
+        run: sudo apt-get update && sudo apt-get install -y megatools
 
       - name: Create YouTube cookies file from secret
         env:
