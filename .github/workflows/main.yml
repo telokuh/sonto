@@ -4,11 +4,6 @@ on:
   repository_dispatch:
     types: [new_url_received]
   workflow_dispatch:
-    inputs:
-      url:
-        description: 'URL to download'
-        required: true
-        type: string
 jobs:
   download-and-release:
     runs-on: ubuntu-latest
@@ -69,7 +64,7 @@ jobs:
           API_HASH: ${{ vars.API_HASH }}
           BOT_TOKEN: ${{ vars.BOT_TOKEN }}
           OWNER_ID: ${{ vars.OWNER_ID }}
-          MEDIAFIRE_PAGE_URL: ${{ github.event.inputs.url }}
+          MEDIAFIRE_PAGE_URL: ${{ github.event.client_payload.url }}
           RCLONE_CONFIG: rclone.conf
         run: python3 mediafire_downloader.py
 
