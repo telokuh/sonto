@@ -1,3 +1,5 @@
+pyrogram
+python-dotenv
+requests
 selenium
 webdriver-manager
-pyrogram
