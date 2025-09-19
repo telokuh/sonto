@@ -17,7 +17,6 @@ OWNER_ID = os.environ.get("OWNER_ID")
 
 # Dapatkan URL halaman dari environment variable
 mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
-# Dapatkan path config rclone dari environment variable
 RCLONE_CONFIG_PATH = os.environ.get("RCLONE_CONFIG")
 
 # Regex untuk mendeteksi URL
@@ -143,6 +142,7 @@ def download_file_with_rclone(url):
         rclone_env["RCLONE_CONFIG"] = RCLONE_CONFIG_PATH
 
     try:
+        # Jalankan rclone copyurl dan tunggu sampai selesai
         result = subprocess.run(
             ['rclone', 'copyurl', url, '.'],
             capture_output=True,
@@ -152,14 +152,21 @@ def download_file_with_rclone(url):
         )
         print(result.stdout)
         
-        filename_match = re.search(r'Copied\s+["\']?([^"\']+)["\']?', result.stdout)
-        if filename_match:
-            filename = filename_match.group(1)
+        # rclone berhasil, sekarang cari file yang baru diunduh
+        # Metode yang lebih andal: cari file yang baru dibuat di direktori saat ini
+        time.sleep(2) # Beri waktu sejenak
+        newly_downloaded_files = sorted([
+            f for f in os.listdir('.') if os.path.isfile(f)
+        ], key=os.path.getmtime, reverse=True)
+        
+        if newly_downloaded_files:
+            filename = newly_downloaded_files[0]
             print(f"File berhasil diunduh sebagai: {filename}")
             return filename
         else:
-            print("Gagal mengekstrak nama file dari output rclone.")
+            print("Gagal menemukan file yang baru diunduh.")
             return None
+            
     except subprocess.CalledProcessError as e:
         print(f"rclone gagal: {e.stderr.strip()}")
         send_telegram_message(f"❌ **`rclone` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
@@ -169,7 +176,6 @@ def download_file_with_rclone(url):
     return None
 
 def download_file(url):
-    # Logika untuk mengunduh dengan requests, seperti sebelumnya
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
