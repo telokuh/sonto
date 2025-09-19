@@ -12,6 +12,7 @@ import json
 import re
 import tempfile
 import shutil
+import glob
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -19,7 +20,6 @@ OWNER_ID = os.environ.get("OWNER_ID")
 
 # Dapatkan URL halaman dari environment variable
 mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
-RCLONE_CONFIG_PATH = os.environ.get("RCLONE_CONFIG")
 
 # Regex untuk mendeteksi URL
 YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
@@ -135,47 +135,35 @@ def get_download_url_with_selenium(url):
     finally:
         driver.quit()
 
-def download_file_with_rclone(url):
-    print(f"Mengunduh file dari MEGA dengan rclone: {url}")
-    send_telegram_message("⬇️ **Mulai mengunduh...**\n`rclone` sedang mengunduh file.")
+def download_file_with_megatools(url):
+    print(f"Mengunduh file dari MEGA dengan megatools: {url}")
+    send_telegram_message("⬇️ **Mulai mengunduh...**\n`megatools` sedang mengunduh file.")
     
-    temp_dir = tempfile.mkdtemp()
-    rclone_env = os.environ.copy()
-    if RCLONE_CONFIG_PATH:
-        rclone_env["RCLONE_CONFIG"] = RCLONE_CONFIG_PATH
-
     try:
-        # Gunakan rclone copy, yang lebih andal untuk URL publik
+        # Jalankan megatools dan tunggu sampai selesai
         subprocess.run(
-            ['rclone', 'copy', url, temp_dir],
+            ['megatools', 'dl', url],
             capture_output=True,
             text=True,
-            check=True,
-            env=rclone_env
+            check=True
         )
         
-        # Pindahkan file dari direktori sementara ke direktori utama
-        downloaded_files = os.listdir(temp_dir)
+        # Cari file yang diunduh
+        downloaded_files = glob.glob('*.*')
         if len(downloaded_files) == 1:
             filename = downloaded_files[0]
-            downloaded_file_path = os.path.join(temp_dir, filename)
-            shutil.move(downloaded_file_path, '.')
-            print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
+            print(f"File berhasil diunduh sebagai: {filename}")
             return filename
         else:
-            print("Gagal menemukan file yang baru diunduh.")
+            print(f"Gagal menemukan file yang baru diunduh. Jumlah file: {len(downloaded_files)}")
+            print("File di direktori:", downloaded_files)
             return None
             
     except subprocess.CalledProcessError as e:
-        print(f"rclone gagal: {e.stderr.strip()}")
-        send_telegram_message(f"❌ **`rclone` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
+        print(f"megatools gagal: {e.stderr.strip()}")
+        send_telegram_message(f"❌ **`megatools` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
-        print("rclone tidak ditemukan.")
-    except Exception as e:
-        print(f"Terjadi kesalahan: {e}")
-    finally:
-        # Hapus direktori sementara
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        print("megatools tidak ditemukan.")
     
     return None
 
@@ -231,8 +219,8 @@ download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 if download_url:
     downloaded_filename = download_file(download_url)
 elif is_mega_url:
-    send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `rclone`...")
-    downloaded_filename = download_file_with_rclone(mediafire_page_url)
+    send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
+    downloaded_filename = download_file_with_megatools(mediafire_page_url)
 else:
     download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
     if download_url_selenium:
