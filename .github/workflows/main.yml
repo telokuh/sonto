@@ -40,10 +40,10 @@ jobs:
             ${{ runner.os }}-megatools-
 
       - name: Install megatools
-        run: |
+        #run: |
           
           #sudo dpkg -i ./megatools_cache/megatools_*.deb
-          sudo apt-get install -f # Memperbaiki dependensi yang mungkin terputus
+          #sudo apt-get install -f # Memperbaiki dependensi yang mungkin terputus
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
