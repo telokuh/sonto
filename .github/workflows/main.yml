@@ -1,74 +1,95 @@
-name: MediaFire Downloader
+name: Download and Release
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
   repository_dispatch:
     types: [new_url_received]
+  workflow_dispatch:
 
 jobs:
-  download_and_release:
+  download-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Diperlukan untuk membuat rilis GitHub
+      contents: write
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.x'
+      - name: Cache Python dependencies
+        id: cache-pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-    - name: Cache Python dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install yt-dlp
-        pip install requests
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
 
-    - name: Set MediaFire Page URL as environment variable
-      run: |
-        echo "MEDIAFIRE_PAGE_URL=${{ github.event.client_payload.url }}" >> $GITHUB_ENV
-        
-    - name: Run MediaFire Downloader Script
-      run: python mediafire_downloader.py
-      env:
-        BOT_TOKEN: ${{ vars.BOT_TOKEN }}
-        OWNER_ID: ${{ vars.OWNER_ID }}
+      - name: Cache rclone installation
+        id: cache-rclone
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/rclone
+          key: ${{ runner.os }}-rclone-v1
+          
+      - name: Install rclone
+        if: steps.cache-rclone.outputs.cache-hit != 'true'
+        run: |
+          sudo -v
+          curl https://rclone.org/install.sh | sudo bash
+          echo "rclone installed successfully"
 
-    - name: Get Downloaded Filename
-      id: get_filename
-      run: |
-        if [ ! -f "downloaded_filename.txt" ]; then
+      - name: Create rclone config file from secret
+        env:
+          RCLONE_CONFIG_SECRET: ${{ vars.RCLONE }}
+        run: |
+          echo "$RCLONE_CONFIG_SECRET" > rclone.conf
+
+      - name: Create YouTube cookies file from secret
+        env:
+          YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
+        if: env.YOUTUBE_COOKIES_SECRET != ''
+        run: |
+          echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
+
+      - name: Run Downloader Script
+        env:
+          API_ID: ${{ vars.API_ID }}
+          API_HASH: ${{ vars.API_HASH }}
+          BOT_TOKEN: ${{ vars.BOT_TOKEN }}
+          OWNER_ID: ${{ vars.OWNER_ID }}
+          MEDIAFIRE_PAGE_URL: ${{ github.event.inputs.url }}
+          RCLONE_CONFIG: rclone.conf
+        run: python3 mediafire_downloader.py
+
+      - name: Get Downloaded Filename
+        id: get_filename
+        run: |
+         if [ ! -f "downloaded_filename.txt" ]; then
           echo "Error: downloaded_filename.txt not found. Exiting."
           exit 1
-        fi
-        FILE_NAME=$(cat downloaded_filename.txt)
-        echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
-      shell: bash
+         fi
+         FILE_NAME=$(cat downloaded_filename.txt)
+         echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
+        shell: bash
 
-    - name: Create GitHub Release
-      id: create_release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: release-${{ github.run_number }}
-        name: Automatic MediaFire Download ${{ github.run_number }}
-        body: |
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+         tag_name: release-${{ github.run_number }}
+         name: Automatic MediaFire Download ${{ github.run_number }}
+         body: |
           Rilis otomatis dari MediaFire.
           URL: ${{ github.event.client_payload.url }}
           File: ${{ steps.get_filename.outputs.file_name }}
-        files: ${{ steps.get_filename.outputs.file_name }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         files: ${{ steps.get_filename.outputs.file_name }}
+        env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
