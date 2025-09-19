@@ -145,27 +145,7 @@ def download_file_with_rclone(url):
         rclone_env["RCLONE_CONFIG"] = RCLONE_CONFIG_PATH
 
     try:
-        # Langkah 1: Dapatkan nama file menggunakan lsjson
-        lsjson_result = subprocess.run(
-            ['rclone', 'lsjson', url],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=rclone_env
-        )
-        file_info = json.loads(lsjson_result.stdout)
-        if not file_info:
-            print("Gagal mendapatkan informasi file dari URL.")
-            return None
-        
-        filename = file_info[0].get('Path')
-        if not filename:
-            print("Gagal mendapatkan nama file dari JSON.")
-            return None
-            
-        print(f"Nama file ditemukan: {filename}")
-        
-        # Langkah 2: Gunakan rclone copy untuk mengunduh
+        # Gunakan rclone copy, yang lebih andal untuk URL publik
         subprocess.run(
             ['rclone', 'copy', url, temp_dir],
             capture_output=True,
@@ -175,11 +155,16 @@ def download_file_with_rclone(url):
         )
         
         # Pindahkan file dari direktori sementara ke direktori utama
-        downloaded_file_path = os.path.join(temp_dir, filename)
-        shutil.move(downloaded_file_path, '.')
-        print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
-        
-        return filename
+        downloaded_files = os.listdir(temp_dir)
+        if len(downloaded_files) == 1:
+            filename = downloaded_files[0]
+            downloaded_file_path = os.path.join(temp_dir, filename)
+            shutil.move(downloaded_file_path, '.')
+            print(f"File berhasil diunduh dan dipindahkan sebagai: {filename}")
+            return filename
+        else:
+            print("Gagal menemukan file yang baru diunduh.")
+            return None
             
     except subprocess.CalledProcessError as e:
         print(f"rclone gagal: {e.stderr.strip()}")
