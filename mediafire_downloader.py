@@ -112,7 +112,8 @@ def get_download_url_with_selenium(url):
         download_button_selector = "a[id*='downloadButton']"
         download_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-        ).click()
+        )
+        download_button.click()
         download_url = download_button.get_attribute("href")
         
         if download_url and download_url.startswith("http"):
