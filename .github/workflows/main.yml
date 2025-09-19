@@ -30,21 +30,25 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
-
       - name: Cache megatools
         id: cache-megatools
         uses: actions/cache@v4
         with:
-          path: /var/cache/apt/archives/
+          path: megatools_cache
           key: ${{ runner.os }}-megatools-v1
           restore-keys: |
             ${{ runner.os }}-megatools-
-      
+
       - name: Install megatools
-        run: sudo apt-get update && sudo apt-get install -y megatools
-      - name: Fix apt cache permissions
-        run: sudo chown -R $(whoami) /var/cache/apt/archives
-        
+        run: |
+          mkdir -p megatools_cache/
+          if [ ! -f "megatools_cache/megatools_*.deb" ]; then
+            sudo apt-get update
+            sudo apt-get install -y --download-only megatools
+            sudo cp /var/cache/apt/archives/megatools_*.deb megatools_cache/
+          fi
+          sudo apt-get install -y ./megatools_cache/megatools_*.deb
+      
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
