@@ -42,7 +42,9 @@ jobs:
       
       - name: Install megatools
         run: sudo apt-get update && sudo apt-get install -y megatools
-
+      - name: Fix apt cache permissions
+        run: sudo chown -R $(whoami) /var/cache/apt/archives
+        
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
