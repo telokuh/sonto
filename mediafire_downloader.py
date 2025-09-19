@@ -264,102 +264,14 @@ def download_file(url):
         send_telegram_message(f"❌ **Gagal mengunduh file.**\n\nDetail: {str(e)[:150]}...")
         return None
 
-def get_download_url_from_pixeldrain(url):
-    print("Menggunakan Selenium untuk Pixeldrain...")
-    
-    # Buat direktori unduhan sementara
-    download_dir = tempfile.mkdtemp()
-    
-    total_size_bytes = 0
-    total_size_human = "Ukuran tidak diketahui"
-    
-    try:
-        service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+def get_download_url_from_pixeldrain_api(url):
+    print("Memproses URL Pixeldrain menggunakan API...")
+    # Mendapatkan ID unik file dari URL
+    file_id = url.split('/')[-1]
+    # Membuat URL unduhan langsung
+    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+    return download_url
 
-        # Konfigurasi preferensi Chrome untuk mengunduh ke direktori sementara
-        prefs = {'download.default_directory': download_dir}
-        options.add_experimental_option('prefs', prefs)
-        
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
-
-        # Cari ukuran file di halaman Pixeldrain
-        try:
-            file_size_element = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "small.file-size"))
-            )
-            total_size_human = file_size_element.text
-            total_size_bytes = human_readable_to_bytes(total_size_human)
-        except Exception:
-            print("Ukuran file tidak ditemukan di halaman.")
-            pass
-            
-        initial_message = f"⬇️ **Mulai mengunduh...**\nMenggunakan Selenium untuk Pixeldrain.\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
-        initial_message_id = send_telegram_message(initial_message)
-
-        # Temukan tombol unduh
-        download_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "button.button_highlight"))
-        )
-        
-        # Klik tombol unduh
-        print(download_button.get_attribute('outerHTML'))
-        
-        print("Mengklik tombol unduh...")
-        download_button.click()
-        
-        # Tunggu hingga file muncul di direktori unduhan dan lacak progres
-        max_wait_time = 30
-        waited_time = 0
-        last_percent_notified = 0
-        
-        while waited_time < max_wait_time:
-            files = os.listdir(download_dir)
-            if files:
-                current_file_path = os.path.join(download_dir, files[0])
-                if not files[0].endswith('.crdownload') and os.path.exists(current_file_path):
-                    # Unduhan selesai
-                    filename = files[0]
-                    downloaded_size = os.path.getsize(current_file_path)
-                    current_percent = 100
-                    edit_telegram_message(initial_message_id, f"⬇️ **Mulai mengunduh...**\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`")
-                    
-                    print(f"File berhasil diunduh sebagai: {filename}")
-                    
-                    # Pindahkan file ke direktori kerja utama
-                    shutil.move(os.path.join(download_dir, filename), os.path.join(os.getcwd(), filename))
-                    
-                    edit_telegram_message(initial_message_id, f"✅ **Selesai!**\nFile berhasil diunduh menggunakan Selenium.")
-                    return filename
-                
-                # Update progress
-                if os.path.exists(current_file_path):
-                    downloaded_size = os.path.getsize(current_file_path)
-                    if total_size_bytes > 0:
-                        current_percent = int(downloaded_size / total_size_bytes * 100)
-                        if current_percent >= last_percent_notified + 10 or current_percent == 100:
-                            last_percent_notified = current_percent
-                            progress_message = f"⬇️ **Mulai mengunduh...**\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
-                            edit_telegram_message(initial_message_id, progress_message)
-
-            time.sleep(1)
-            waited_time += 1
-        
-        raise Exception("Waktu unduhan habis.")
-        
-    except Exception as e:
-        print(f"Terjadi kesalahan saat menggunakan Selenium untuk Pixeldrain: {e}")
-        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan Pixeldrain.\n\nDetail: {str(e)[:150]}...")
-        driver.save_screenshot("pixeldrain_error_screenshot.png")
-        return None
-    finally:
-        driver.quit()
-        # Hapus direktori sementara
-        shutil.rmtree(download_dir, ignore_errors=True)
 
 def human_readable_size(size_bytes):
     if size_bytes is None or size_bytes == 0:
@@ -384,8 +296,10 @@ download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 if download_url:
     downloaded_filename = download_file(download_url)
 elif is_pixeldrain_url:
-    downloaded_filename = get_download_url_from_pixeldrain(mediafire_page_url)
-
+    send_telegram_message("`yt-dlp` gagal. Menggunakan API Pixeldrain.")
+    download_url_pixeldrain = get_download_url_from_pixeldrain_api(mediafire_page_url)
+    if download_url_pixeldrain:
+        downloaded_filename = download_file(download_url_pixeldrain)
 elif is_mega_url:
     send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
     downloaded_filename = download_file_with_megatools(mediafire_page_url)
