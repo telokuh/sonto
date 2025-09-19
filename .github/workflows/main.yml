@@ -41,12 +41,7 @@ jobs:
 
       - name: Install megatools
         run: |
-          mkdir -p megatools_cache/
-          if [ ! -f "megatools_cache/megatools_*.deb" ]; then
-            sudo apt-get update
-            sudo apt-get install -y --download-only megatools
-            sudo cp /var/cache/apt/archives/megatools_*.deb megatools_cache/
-          fi
+          
           sudo dpkg -i ./megatools_cache/megatools_*.deb
           sudo apt-get install -f # Memperbaiki dependensi yang mungkin terputus
       - name: Create YouTube cookies file from secret
