@@ -40,17 +40,13 @@ def home():
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
-# Gunakan filters.regex("http") untuk mendeteksi 'http'
-@pyrogram_app.on_message(filters.text & filters.private & ~filters.me & filters.regex("http"))
+@pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
 async def handle_url(client, message):
     text = message.text
-    # Gunakan ekspresi reguler yang lebih sederhana untuk mengekstrak URL
-    url_regex = r"https?://(?:www\.)?[\w\d\-_]+\.\w+(?:/[\w\d\-_.~:/?#\[\]@!$&'()*+,;=]*)?"
-    urls = re.findall(url_regex, text)
 
-    if urls:
-        # Kita hanya akan memproses URL pertama yang ditemukan
-        url = urls[0]
+    # Deteksi URL hanya jika teks mengandung "http"
+    if "http" in text:
+        url = text
         await message.reply_text(f"URL terdeteksi: {url}\nMeneruskan ke GitHub Actions...")
 
         headers = {
