@@ -41,15 +41,14 @@ jobs:
       - name: Install rclone (if not in cache)
         if: steps.cache-rclone.outputs.cache-hit != 'true'
         run: |
-          # Get the latest rclone download link for Linux AMD64
-          RCLONE_VERSION=$(curl -sL https://rclone.org/downloads/ | grep -oP 'rclone-v\d+\.\d+\.\d+-linux-amd64.zip' | head -n 1)
-          RCLONE_URL="https://downloads.rclone.org/$RCLONE_VERSION"
+          # URL yang selalu mengarah ke versi terbaru
+          RCLONE_URL="https://downloads.rclone.org/rclone-current-linux-amd64.zip"
           
-          # Download and extract
+          # Download, unzip, dan pindahkan
           curl -sL "$RCLONE_URL" -o rclone.zip
           unzip rclone.zip
           
-          # Move binary to a user-owned directory and make it executable
+          # Pindahkan binary ke direktori pengguna dan jadikan executable
           mv rclone-*/rclone ~/bin/
           chmod +x ~/bin/rclone
           
@@ -57,6 +56,29 @@ jobs:
 
       - name: Add rclone to PATH
         run: echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Create rclone config file from secret
+        env:
+          RCLONE_CONFIG_SECRET: ${{ secrets.RCLONE_CONFIG_FILE }}
+        run: |
+          echo "$RCLONE_CONFIG_SECRET" > rclone.conf
+
+      - name: Create YouTube cookies file from secret
+        env:
+          YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
+        if: env.YOUTUBE_COOKIES_SECRET != ''
+        run: |
+          echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
+
+      - name: Run Downloader Script
+        env:
+          API_ID: ${{ secrets.API_ID }}
+          API_HASH: ${{ secrets.API_HASH }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.OWNER_ID }}
+          MEDIAFIRE_PAGE_URL: ${{ github.event.client_payload.url }}
+          RCLONE_CONFIG: rclone.conf
+        run: python3 mediafire_downloader.py
 
       - name: Create rclone config file from secret
         env:
