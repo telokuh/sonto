@@ -42,7 +42,7 @@ jobs:
       - name: Install megatools
         run: |
           
-          sudo dpkg -i ./megatools_cache/megatools_*.deb
+          #sudo dpkg -i ./megatools_cache/megatools_*.deb
           sudo apt-get install -f # Memperbaiki dependensi yang mungkin terputus
       - name: Create YouTube cookies file from secret
         env:
