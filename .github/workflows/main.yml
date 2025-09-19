@@ -35,14 +35,15 @@ jobs:
         id: cache-rclone
         uses: actions/cache@v4
         with:
-          path: /usr/local/bin/rclone
+          path: ~/bin/
           key: ${{ runner.os }}-rclone-v1
           
       - name: Install rclone
         if: steps.cache-rclone.outputs.cache-hit != 'true'
         run: |
-          sudo -v
-          curl https://rclone.org/install.sh | sudo bash
+          mkdir -p ~/bin
+          curl -sL https://rclone.org/install.sh | bash -s -- --no-sudo --b ~/bin
+          echo "$HOME/bin" >> $GITHUB_PATH
           echo "rclone installed successfully"
 
       - name: Create rclone config file from secret
