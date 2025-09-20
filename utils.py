@@ -272,9 +272,31 @@ def download_file_with_megatools(url):
     
     return None
 
+def get_download_url_from_pixeldrain_api(url):
+    print("Memproses URL Pixeldrain menggunakan API...")
+    file_id = url.split('/')[-1]
+    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+    return download_url
+
+def human_readable_size(size_bytes):
+    if size_bytes is None or size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
+# ... (kode yang sudah ada di utils.py) ...
+
 def download_file(url):
     try:
-        response = requests.get(url, stream=True)
+        # Tambahkan header User-Agent agar permintaan terlihat seperti dari browser
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        
+        # Kirim permintaan dengan header baru
+        response = requests.get(url, headers=headers, stream=True)
         response.raise_for_status()
         
         filename = response.headers.get('Content-Disposition')
@@ -313,17 +335,5 @@ def download_file(url):
         send_telegram_message(f"❌ **Gagal mengunduh file.**\n\nDetail: {str(e)[:150]}...")
         return None
 
-def get_download_url_from_pixeldrain_api(url):
-    print("Memproses URL Pixeldrain menggunakan API...")
-    file_id = url.split('/')[-1]
-    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
-    return download_url
+# ... (lanjutan kode di utils.py) ...
 
-def human_readable_size(size_bytes):
-    if size_bytes is None or size_bytes == 0:
-        return "0B"
-    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    p = math.pow(1024, i)
-    s = round(size_bytes / p, 2)
-    return f"{s} {size_name[i]}"
