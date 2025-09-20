@@ -6,7 +6,8 @@ from utils import (
     get_download_url_with_selenium,
     download_file_with_megatools,
     download_file,
-    get_download_url_from_pixeldrain_api
+    get_download_url_from_pixeldrain_api,
+    get_download_url_with_selenium_gofile
 )
 
 # Dapatkan URL halaman dari environment variable
