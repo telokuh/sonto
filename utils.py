@@ -19,6 +19,107 @@ import math
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
+# ... (kode impor dan fungsi lain) ...
+from selenium.common.exceptions import TimeoutException
+
+def download_file_with_selenium_gofile(url):
+    print("Mencoba mengunduh file Gofile dengan Selenium...")
+    send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
+    driver = None
+    download_dir = os.path.join(os.getcwd(), 'downloads')
+    
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    try:
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        prefs = {
+            "download.default_directory": download_dir,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True
+        }
+        options.add_experimental_option("prefs", prefs)
+        
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+
+        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        download_link = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
+        )
+        
+        filename = download_link.text.strip()
+        print(f"Nama file yang diharapkan: {filename}")
+        
+        # --- Bagian yang Diperbarui: Tambahkan waktu tunggu untuk selektor ukuran ---
+        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2)"
+        
+        try:
+            file_size_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, file_size_selector))
+            )
+            size_text = file_size_element.text.strip()
+            total_size = human_readable_to_bytes(size_text)
+        except TimeoutException:
+            print("Peringatan: Elemen ukuran file tidak ditemukan. Progres unduhan tidak akan ditampilkan.")
+            total_size = 0 # Tetapkan 0 jika elemen tidak ditemukan
+        
+        total_size_human = human_readable_size(total_size)
+        print(f"Ukuran file: {total_size_human} ({total_size} bytes)")
+        
+        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
+        message_id = send_telegram_message(initial_message)
+        
+        download_link.click()
+        
+        file_path = os.path.join(download_dir, filename)
+        
+        timeout = 600
+        start_time = time.time()
+        last_percent_notified = 0
+        
+        while not os.path.exists(file_path) or (total_size > 0 and os.path.getsize(file_path) < total_size):
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Waktu unduhan habis.")
+            
+            if os.path.exists(file_path) and total_size > 0:
+                downloaded_size = os.path.getsize(file_path)
+                current_percent = int((downloaded_size / total_size) * 100)
+                
+                if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                    last_percent_notified = current_percent
+                    progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
+                    edit_telegram_message(message_id, progress_message)
+            
+            time.sleep(2)
+        
+        final_path = os.path.join(os.getcwd(), filename)
+        shutil.move(file_path, final_path)
+        
+        print(f"File berhasil diunduh sebagai: {final_path}")
+        return filename
+            
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengunduh Gofile dengan Selenium: {e}")
+        send_telegram_message(f"❌ Gagal mengunduh file GoFile.\n\nDetail: {str(e)[:150]}...")
+        if driver:
+            driver.save_screenshot("gofile_error_screenshot.png")
+            print("Screenshot gofile_error_screenshot.png telah dibuat.")
+        return None
+    finally:
+        if driver:
+            driver.quit()
+        if os.path.exists(download_dir):
+            shutil.rmtree(download_dir, ignore_errors=True)
+
+# ... (lanjutan kode di utils.py) ...
+
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
@@ -129,93 +230,6 @@ def get_download_url_with_selenium(url):
         if driver:
             driver.quit()
 
-def download_file_with_selenium_gofile(url):
-    print("Mencoba mengunduh file Gofile dengan Selenium...")
-    send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
-    driver = None
-    download_dir = os.path.join(os.getcwd(), 'downloads')
-    
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
-
-    try:
-        service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
-        prefs = {
-            "download.default_directory": download_dir,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-        options.add_experimental_option("prefs", prefs)
-        
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
-
-        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
-        download_link = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
-        )
-        
-        filename = download_link.text.strip()
-        print(f"Nama file yang diharapkan: {filename}")
-        
-        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2) > span"
-        file_size_element = driver.find_element(By.CSS_SELECTOR, file_size_selector)
-        size_text = file_size_element.text.strip()
-        total_size = human_readable_to_bytes(size_text)
-        
-        total_size_human = human_readable_size(total_size)
-        print(f"Ukuran file: {total_size_human} ({total_size} bytes)")
-        
-        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
-        message_id = send_telegram_message(initial_message)
-        
-        download_link.click()
-        
-        file_path = os.path.join(download_dir, filename)
-        
-        timeout = 600
-        start_time = time.time()
-        last_percent_notified = 0
-        
-        while not os.path.exists(file_path) or (os.path.getsize(file_path) < total_size and total_size > 0):
-            if time.time() - start_time > timeout:
-                raise TimeoutError("Waktu unduhan habis.")
-            
-            if os.path.exists(file_path) and total_size > 0:
-                downloaded_size = os.path.getsize(file_path)
-                current_percent = int((downloaded_size / total_size) * 100)
-                
-                if current_percent >= last_percent_notified + 10 or current_percent == 100:
-                    last_percent_notified = current_percent
-                    progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
-                    edit_telegram_message(message_id, progress_message)
-            
-            time.sleep(2)
-        
-        final_path = os.path.join(os.getcwd(), filename)
-        shutil.move(file_path, final_path)
-        
-        print(f"File berhasil diunduh sebagai: {final_path}")
-        return filename
-            
-    except Exception as e:
-        print(f"Terjadi kesalahan saat mengunduh Gofile dengan Selenium: {e}")
-        send_telegram_message(f"❌ Gagal mengunduh file GoFile.\n\nDetail: {str(e)[:150]}...")
-        if driver:
-            driver.save_screenshot("gofile_error_screenshot.png")
-            print("Screenshot gofile_error_screenshot.png telah dibuat.")
-        return None
-    finally:
-        if driver:
-            driver.quit()
-        if os.path.exists(download_dir):
-            shutil.rmtree(download_dir, ignore_errors=True)
 
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
