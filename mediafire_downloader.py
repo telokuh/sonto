@@ -4,10 +4,10 @@ from utils import (
     send_telegram_message,
     get_download_url_with_yt_dlp,
     get_download_url_with_selenium,
-    get_download_url_with_selenium_gofile,
     download_file_with_megatools,
-    download_file_with_aria2c, # <-- Ganti ini
-    get_download_url_from_pixeldrain_api
+    download_file_with_aria2c,
+    get_download_url_from_pixeldrain_api,
+    download_file_with_selenium_gofile
 )
 
 # Dapatkan URL halaman dari environment variable
@@ -36,25 +36,23 @@ downloaded_filename = None
 download_url = get_download_url_with_yt_dlp(mediafire_page_url)
 
 if download_url:
-    downloaded_filename = download_file_with_aria2c(download_url) # <-- Gunakan fungsi baru di sini
+    downloaded_filename = download_file_with_aria2c(download_url)
 elif is_pixeldrain_url:
     send_telegram_message("`yt-dlp` gagal. Menggunakan API Pixeldrain.")
     download_url_pixeldrain = get_download_url_from_pixeldrain_api(mediafire_page_url)
     if download_url_pixeldrain:
-        downloaded_filename = download_file_with_aria2c(download_url_pixeldrain) # <-- Dan di sini
+        downloaded_filename = download_file_with_aria2c(download_url_pixeldrain)
 elif is_mega_url:
     send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
     downloaded_filename = download_file_with_megatools(mediafire_page_url)
 elif is_gofile_url:
     send_telegram_message("`yt-dlp` gagal memproses URL GoFile. Menggunakan Selenium...")
-    download_url_gofile = get_download_url_with_selenium_gofile(mediafire_page_url)
-    if download_url_gofile:
-        downloaded_filename = download_file_with_aria2c(download_url_gofile,referer=mediafire_page_url) # <-- Dan di sini
+    downloaded_filename = download_file_with_selenium_gofile(mediafire_page_url)
 else:
     send_telegram_message("`yt-dlp` gagal memproses URL. Menggunakan Selenium sebagai cadangan...")
     download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
     if download_url_selenium:
-        downloaded_filename = download_file_with_aria2c(download_url_selenium) # <-- Dan di sini
+        downloaded_filename = download_file_with_aria2c(download_url_selenium)
 
 if downloaded_filename:
     with open("downloaded_filename.txt", "w") as f:
