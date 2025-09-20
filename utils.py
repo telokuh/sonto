@@ -129,6 +129,7 @@ def get_download_url_with_selenium(url):
         if driver:
             driver.quit()
 
+# ... (kode impor dan fungsi lain) ...
 def download_file_with_selenium_gofile(url):
     print("Mencoba mengunduh file Gofile dengan Selenium...")
     send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
@@ -171,16 +172,19 @@ def download_file_with_selenium_gofile(url):
         # Klik tautan unduhan
         download_link.click()
         
-        # Tunggu hingga file muncul di direktori unduhan
+        # --- Tambahan Baru: Memantau direktori untuk file yang diunduh ---
         file_path = os.path.join(download_dir, filename)
         
-        timeout = 5 # 1menit
+        timeout = 120  # 10 menit
         start_time = time.time()
         
         while not os.path.exists(file_path):
             if time.time() - start_time > timeout:
                 raise TimeoutError("Waktu unduhan habis.")
-            time.sleep(1)
+            # Cek setiap 2 detik
+            time.sleep(2)
+        
+        print(f"File berhasil diunduh sebagai: {file_path}")
         
         # Pindahkan file dari direktori downloads ke direktori kerja utama
         final_path = os.path.join(os.getcwd(), filename)
@@ -202,7 +206,7 @@ def download_file_with_selenium_gofile(url):
         # Bersihkan direktori unduhan sementara jika ada
         if os.path.exists(download_dir):
             shutil.rmtree(download_dir, ignore_errors=True)
-
+            
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
     original_cwd = os.getcwd()
