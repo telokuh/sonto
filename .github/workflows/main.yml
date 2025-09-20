@@ -76,15 +76,15 @@ jobs:
          echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-         tag_name: release-${{ github.run_number }}
-         name: File ${{ steps.get_filename.outputs.file_name }}
-         body: |
-          Rilis 
-          File: ${{ steps.get_filename.outputs.file_name }}
-         files: ${{ steps.get_filename.outputs.file_name }}
-        env:
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #- name: Create GitHub Release
+      #  id: create_release
+      #  uses: softprops/action-gh-release@v1
+      #  with:
+      #   tag_name: release-${{ github.run_number }}
+      #   name: File ${{ steps.get_filename.outputs.file_name }}
+      #   body: |
+      #    Rilis 
+      #    File: ${{ steps.get_filename.outputs.file_name }}
+      #   files: ${{ steps.get_filename.outputs.file_name }}
+      #  env:
+      #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
