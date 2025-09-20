@@ -14,6 +14,8 @@ import tempfile
 import shutil
 import glob
 import math
+import fcntl
+
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -302,6 +304,7 @@ def download_file_with_megatools(url):
     
     return None
 
+
 def download_file_with_aria2c(url, referer=None):
     """Mengunduh file menggunakan aria2c dengan dukungan referer."""
     print(f"Mengunduh file dengan aria2c: {url}")
@@ -334,26 +337,53 @@ def download_file_with_aria2c(url, referer=None):
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=False, # Penting: Atur ke False untuk membaca byte
+            bufsize=0 # Atur ke 0 agar tidak ada buffering
         )
+        
+        # Atur stdout ke mode non-blocking
+        fd = process.stdout.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
         last_percent_notified = -1
+        progress_regex = re.compile(b'\\x1b\\[K\\[\\d+\\.\\d+\\%') # Regex yang cocok untuk output aria2c
         
-        progress_regex = re.compile(r'\[.+?\]\s+(\d+\.\d+)%.*?\(\d+/\d+\)')
+        output_buffer = b''
         
-        for line in iter(process.stdout.readline, ''):
-            match = progress_regex.search(line)
-            if match:
-                current_percent = int(float(match.group(1)))
+        while process.poll() is None:
+            try:
+                # Baca output dalam mode non-blocking
+                chunk = os.read(fd, 1024)
+                output_buffer += chunk
                 
-                if current_percent >= last_percent_notified + 5 or current_percent == 100:
-                    last_percent_notified = current_percent
-                    progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
-                    edit_telegram_message(initial_message_id, progress_message)
+                # Cek buffer untuk baris atau pembaruan baru
+                while b'\n' in output_buffer:
+                    line, output_buffer = output_buffer.split(b'\n', 1)
+                    
+                    if b'OK' in line:
+                        break
+
+                    match = re.search(progress_regex, line)
+                    if match:
+                        progress_part = match.group(0).decode('utf-8')
+                        current_percent = int(re.search(r'\d+', progress_part).group(0))
+                        
+                        if current_percent >= last_percent_notified + 5 or current_percent == 100:
+                            last_percent_notified = current_percent
+                            progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
+                            edit_telegram_message(initial_message_id, progress_message)
+            except OSError:
+                time.sleep(1)
+        
+        # Tangani sisa output
+        for line in iter(process.stdout.readline, b''):
+             # Lanjutkan memproses sisa output
+             pass
 
         process.wait()
         if process.returncode != 0:
-            error_output = process.stderr.read()
+            error_output = process.stderr.read().decode('utf-8')
             raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
             
         print(f"File berhasil diunduh ke: {os.path.join(download_dir, filename)}")
