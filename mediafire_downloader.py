@@ -16,6 +16,7 @@ mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
 YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
 MEGA_URL_REGEX = r"(?:https?://)?(?:www\.)?mega\.nz/.+"
 PIXELDRAIN_URL_REGEX = r"(?:https?://)?(?:www\.)?pixeldrain\.com/u/.+"
+GOFILE_URL_REGEX = r"(?:https?://)?(?:www\.)?gofile\.io/.+"
 
 if not mediafire_page_url:
     print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
@@ -25,6 +26,7 @@ if not mediafire_page_url:
 formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
 send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
 
+is_gofile_url = re.match(GOFILE_URL_REGEX, mediafire_page_url) # <-- Tambahkan deteksi URL GoFile
 is_mega_url = re.match(MEGA_URL_REGEX, mediafire_page_url)
 is_pixeldrain_url = re.match(PIXELDRAIN_URL_REGEX, mediafire_page_url)
 downloaded_filename = None
@@ -39,6 +41,11 @@ elif is_pixeldrain_url:
     download_url_pixeldrain = get_download_url_from_pixeldrain_api(mediafire_page_url)
     if download_url_pixeldrain:
         downloaded_filename = download_file(download_url_pixeldrain)
+
+elif is_gofile_url: # <-- Tambahkan kondisi untuk GoFile
+    send_telegram_message("`yt-dlp` gagal memproses URL GoFile. Menggunakan Selenium...")
+    download_url_gofile = get_download_url_with_selenium_gofile(mediafire_page_url)
+    
 elif is_mega_url:
     send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
     downloaded_filename = download_file_with_megatools(mediafire_page_url)
