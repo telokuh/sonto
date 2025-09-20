@@ -28,18 +28,17 @@ def get_download_url_with_selenium_gofile(url):
     send_telegram_message("🔄 Mencari URL unduhan GoFile dengan mencocokkan nama file.")
     driver = None
     try:
-        # Mengaktifkan log performa untuk mendengarkan permintaan jaringan
-        caps = DesiredCapabilities.CHROME
-        caps['goog:loggingPrefs'] = {'performance': 'ALL'}
-
+        # Menyiapkan opsi Chrome
         service = Service(ChromeDriverManager().install())
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
-        # Tambahkan opsi untuk logging
-        driver = webdriver.Chrome(service=service, options=options, desired_capabilities=caps)
+        # --- Perbaikan: Mengatur logging preferences menggunakan set_capability ---
+        options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
+        
+        driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
         # Tunggu hingga tautan unduhan muncul dan dapatkan nama file dari teksnya
@@ -52,7 +51,6 @@ def get_download_url_with_selenium_gofile(url):
         filename = download_link.text.strip()
         print(f"Nama file yang ditemukan: {filename}")
 
-        # --- Tambahan Baru ---
         # Cetak outerHTML dari elemen yang akan diklik untuk debugging
         outer_html = download_link.get_attribute("outerHTML")
         print("--------------------")
