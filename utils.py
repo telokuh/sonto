@@ -164,7 +164,7 @@ def download_file_with_selenium_gofile(url):
         filename = download_link.text.strip()
         print(f"Nama file yang diharapkan: {filename}")
         
-        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2)"
+        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2) > span"
         file_size_element = driver.find_element(By.CSS_SELECTOR, file_size_selector)
         size_text = file_size_element.text.strip()
         total_size = human_readable_to_bytes(size_text)
