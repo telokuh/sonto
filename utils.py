@@ -384,13 +384,17 @@ def human_readable_size(size_bytes):
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
     return f"{s} {size_name[i]}"
-    
+
+
 def human_readable_to_bytes(size_str):
     if not size_str:
         return 0
-    size_str = size_str.upper().replace('B', '').strip()
     
-    match = re.match(r"(\d+\.?\d*)\s*(KB|MB|GB|TB)?", size_str)
+    size_str = size_str.upper().strip()
+    
+    # Regex yang lebih baik untuk menangani format seperti '1.9 GB'
+    match = re.match(r"(\d+\.?\d*)\s*(KB|MB|GB|TB)", size_str)
+    
     if not match:
         return 0
     
