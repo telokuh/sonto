@@ -14,84 +14,11 @@ import tempfile
 import shutil
 import glob
 import math
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
-
-
-# ... (kode impor yang sudah ada) ...
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-
-def get_download_url_with_selenium_gofile(url):
-    print("Mencoba mendapatkan URL unduhan Gofile dengan nama file dari log jaringan...")
-    send_telegram_message("🔄 Mencari URL unduhan GoFile dengan mencocokkan nama file.")
-    driver = None
-    try:
-        # Menyiapkan opsi Chrome
-        service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
-        # --- Perbaikan: Mengatur logging preferences menggunakan set_capability ---
-        options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
-        
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
-
-        # Tunggu hingga tautan unduhan muncul dan dapatkan nama file dari teksnya
-        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
-        download_link = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
-        )
-        
-        # Dapatkan nama file dari teks tautan dan bersihkan spasi tambahan
-        filename = download_link.text.strip()
-        print(f"Nama file yang ditemukan: {filename}")
-
-        # Cetak outerHTML dari elemen yang akan diklik untuk debugging
-        outer_html = download_link.get_attribute("outerHTML")
-        print("--------------------")
-        print("OuterHTML dari elemen yang diklik:")
-        print(outer_html)
-        print("--------------------")
-        
-        # Klik tautan unduhan
-        download_link.click()
-        
-        # Beri sedikit waktu untuk permintaan jaringan terpicu
-        time.sleep(5)
-        
-        # Ambil log performa
-        performance_logs = driver.get_log('performance')
-        
-        # Cari URL unduhan dari log
-        for log in performance_logs:
-            try:
-                message = json.loads(log['message'])['message']
-                if message['method'] == 'Network.requestWillBeSent':
-                    request_url = message['params']['request']['url']
-                    # Cek apakah URL berisi nama file
-                    if filename in request_url:
-                        print(f"URL unduhan ditemukan di log: {request_url}")
-                        return request_url
-            except (json.JSONDecodeError, KeyError):
-                continue
-                    
-        raise Exception("Tidak dapat menemukan URL unduhan yang valid di log jaringan.")
-            
-    except Exception as e:
-        print(f"Terjadi kesalahan saat menggunakan Selenium untuk Gofile: {e}")
-        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan GoFile.\n\nDetail: {str(e)[:150]}...")
-        if driver:
-            driver.save_screenshot("gofile_error_screenshot.png")
-            print("Screenshot gofile_error_screenshot.png telah dibuat.")
-        return None
-    finally:
-        if driver:
-            driver.quit()
 
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
@@ -203,6 +130,76 @@ def get_download_url_with_selenium(url):
         if driver:
             driver.quit()
 
+def get_download_url_with_selenium_gofile(url):
+    print("Mencoba mendapatkan URL unduhan Gofile dengan nama file dari log jaringan...")
+    send_telegram_message("🔄 Mencari URL unduhan GoFile dengan mencocokkan nama file.")
+    driver = None
+    try:
+        # Menyiapkan opsi Chrome
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        # --- Perbaikan: Mengatur logging preferences menggunakan set_capability ---
+        options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
+        
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+
+        # Tunggu hingga tautan unduhan muncul dan dapatkan nama file dari teksnya
+        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        download_link = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
+        )
+        
+        # Dapatkan nama file dari teks tautan dan bersihkan spasi tambahan
+        filename = download_link.text.strip()
+        print(f"Nama file yang ditemukan: {filename}")
+
+        # Cetak outerHTML dari elemen yang akan diklik untuk debugging
+        outer_html = download_link.get_attribute("outerHTML")
+        print("--------------------")
+        print("OuterHTML dari elemen yang diklik:")
+        print(outer_html)
+        print("--------------------")
+        
+        # Klik tautan unduhan
+        download_link.click()
+        
+        # Beri sedikit waktu untuk permintaan jaringan terpicu
+        time.sleep(5)
+        
+        # Ambil log performa
+        performance_logs = driver.get_log('performance')
+        
+        # Cari URL unduhan dari log
+        for log in performance_logs:
+            try:
+                message = json.loads(log['message'])['message']
+                if message['method'] == 'Network.requestWillBeSent':
+                    request_url = message['params']['request']['url']
+                    # Cek apakah URL berisi nama file
+                    if filename in request_url:
+                        print(f"URL unduhan ditemukan di log: {request_url}")
+                        return request_url
+            except (json.JSONDecodeError, KeyError):
+                continue
+                    
+        raise Exception("Tidak dapat menemukan URL unduhan yang valid di log jaringan.")
+            
+    except Exception as e:
+        print(f"Terjadi kesalahan saat menggunakan Selenium untuk Gofile: {e}")
+        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan GoFile.\n\nDetail: {str(e)[:150]}...")
+        if driver:
+            driver.save_screenshot("gofile_error_screenshot.png")
+            print("Screenshot gofile_error_screenshot.png telah dibuat.")
+        return None
+    finally:
+        if driver:
+            driver.quit()
+
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
     original_cwd = os.getcwd()
@@ -272,6 +269,70 @@ def download_file_with_megatools(url):
     
     return None
 
+def download_file_with_aria2c(url):
+    """Mengunduh file menggunakan aria2c dan memantau progresnya."""
+    print(f"Mengunduh file dengan aria2c: {url}")
+    
+    # Dapatkan nama file dari URL
+    filename = url.split('/')[-1]
+    if '?' in filename:
+        filename = filename.split('?')[0]
+    
+    initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
+    
+    try:
+        command = [
+            'aria2c',
+            '--allow-overwrite',
+            '--auto-file-renaming=false',
+            '-x', '16',
+            '-s', '16',
+            '--continue',
+            url
+        ]
+        
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        last_percent_notified = -1
+        
+        # Regex untuk mengekstrak progres dari output aria2c
+        progress_regex = re.compile(r'\[.+?\]\s+(\d+\.\d+)%.*?\(\d+/\d+\)')
+        
+        for line in iter(process.stdout.readline, ''):
+            match = progress_regex.search(line)
+            if match:
+                current_percent = int(float(match.group(1)))
+                
+                if current_percent >= last_percent_notified + 5 or current_percent == 100:
+                    last_percent_notified = current_percent
+                    progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
+                    edit_telegram_message(initial_message_id, progress_message)
+
+        process.wait()
+        if process.returncode != 0:
+            error_output = process.stderr.read()
+            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
+            
+        print(f"File berhasil diunduh sebagai: {filename}")
+        return filename
+        
+    except FileNotFoundError:
+        print("aria2c tidak ditemukan. Pastikan sudah terinstal dan ada di PATH.")
+        send_telegram_message("❌ **`aria2c` tidak ditemukan.**\n\nPastikan `aria2c` sudah terinstal.")
+    except subprocess.CalledProcessError as e:
+        print(f"aria2c gagal: {e.stderr.strip()}")
+        send_telegram_message(f"❌ **`aria2c` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengunduh dengan aria2c: {e}")
+        send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
+        
+    return None
+
 def get_download_url_from_pixeldrain_api(url):
     print("Memproses URL Pixeldrain menggunakan API...")
     file_id = url.split('/')[-1]
@@ -286,54 +347,3 @@ def human_readable_size(size_bytes):
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
     return f"{s} {size_name[i]}"
-# ... (kode yang sudah ada di utils.py) ...
-
-def download_file(url):
-    try:
-        # Tambahkan header User-Agent agar permintaan terlihat seperti dari browser
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
-        }
-        
-        # Kirim permintaan dengan header baru
-        response = requests.get(url, headers=headers, stream=True)
-        response.raise_for_status()
-        
-        filename = response.headers.get('Content-Disposition')
-        if filename:
-            filename = filename.split('filename=')[1].strip('"')
-        else:
-            filename = url.split('/')[-1]
-        
-        if len(filename.split('.')) < 2:
-            filename = "downloaded_file" + os.path.splitext(url)[-1]
-
-        total_size = int(response.headers.get('content-length', 0))
-        total_size_human = human_readable_size(total_size)
-        
-        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
-        message_id = send_telegram_message(initial_message)
-
-        downloaded_size = 0
-        last_percent_notified = 0
-
-        with open(filename, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-                downloaded_size += len(chunk)
-                if total_size > 0:
-                    current_percent = int(downloaded_size / total_size * 100)
-                    if current_percent >= last_percent_notified + 10 or current_percent == 100:
-                        last_percent_notified = current_percent
-                        progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
-                        edit_telegram_message(message_id, progress_message)
-        
-        print(f"File berhasil diunduh sebagai: {filename}")
-        return filename
-    except requests.exceptions.RequestException as e:
-        print(f"Gagal mengunduh file: {e}")
-        send_telegram_message(f"❌ **Gagal mengunduh file.**\n\nDetail: {str(e)[:150]}...")
-        return None
-
-# ... (lanjutan kode di utils.py) ...
-
