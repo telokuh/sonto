@@ -49,7 +49,7 @@ elif is_gofile_url:
     send_telegram_message("`yt-dlp` gagal memproses URL GoFile. Menggunakan Selenium...")
     download_url_gofile = get_download_url_with_selenium_gofile(mediafire_page_url)
     if download_url_gofile:
-        downloaded_filename = download_file_with_aria2c(download_url_gofile) # <-- Dan di sini
+        downloaded_filename = download_file_with_aria2c(download_url_gofile,referer=mediafire_page_url) # <-- Dan di sini
 else:
     send_telegram_message("`yt-dlp` gagal memproses URL. Menggunakan Selenium sebagai cadangan...")
     download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
