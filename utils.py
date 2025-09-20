@@ -304,103 +304,6 @@ def download_file_with_megatools(url):
     
     return None
 
-
-def download_file_with_aria2c(url, referer=None):
-    """Mengunduh file menggunakan aria2c dengan dukungan referer."""
-    print(f"Mengunduh file dengan aria2c: {url}")
-    
-    filename = url.split('/')[-1]
-    if '?' in filename:
-        filename = filename.split('?')[0]
-    
-    download_dir = os.getcwd()
-
-    initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
-    
-    try:
-        command = [
-            'aria2c',
-            '--allow-overwrite',
-            '--auto-file-renaming=false',
-            '--dir', download_dir,
-            '-x', '16',
-            '-s', '16',
-            '--continue',
-        ]
-        
-        if referer:
-            command.extend(['--referer', referer])
-            
-        command.append(url)
-        
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False, # Penting: Atur ke False untuk membaca byte
-            bufsize=0 # Atur ke 0 agar tidak ada buffering
-        )
-        
-        # Atur stdout ke mode non-blocking
-        fd = process.stdout.fileno()
-        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-
-        last_percent_notified = -1
-        progress_regex = re.compile(b'\\x1b\\[K\\[\\d+\\.\\d+\\%') # Regex yang cocok untuk output aria2c
-        
-        output_buffer = b''
-        
-        while process.poll() is None:
-            try:
-                # Baca output dalam mode non-blocking
-                chunk = os.read(fd, 1024)
-                output_buffer += chunk
-                
-                # Cek buffer untuk baris atau pembaruan baru
-                while b'\n' in output_buffer:
-                    line, output_buffer = output_buffer.split(b'\n', 1)
-                    
-                    if b'OK' in line:
-                        break
-
-                    match = re.search(progress_regex, line)
-                    if match:
-                        progress_part = match.group(0).decode('utf-8')
-                        current_percent = int(re.search(r'\d+', progress_part).group(0))
-                        
-                        if current_percent >= last_percent_notified + 5 or current_percent == 100:
-                            last_percent_notified = current_percent
-                            progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
-                            edit_telegram_message(initial_message_id, progress_message)
-            except OSError:
-                time.sleep(1)
-        
-        # Tangani sisa output
-        for line in iter(process.stdout.readline, b''):
-             # Lanjutkan memproses sisa output
-             pass
-
-        process.wait()
-        if process.returncode != 0:
-            error_output = process.stderr.read().decode('utf-8')
-            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
-            
-        print(f"File berhasil diunduh ke: {os.path.join(download_dir, filename)}")
-        return filename
-        
-    except FileNotFoundError:
-        print("aria2c tidak ditemukan. Pastikan sudah terinstal dan ada di PATH.")
-        send_telegram_message("❌ **`aria2c` tidak ditemukan.**\n\nPastikan `aria2c` sudah terinstal.")
-    except subprocess.CalledProcessError as e:
-        print(f"aria2c gagal: {e.stderr.strip()}")
-        send_telegram_message(f"❌ **`aria2c` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
-    except Exception as e:
-        print(f"Terjadi kesalahan saat mengunduh dengan aria2c: {e}")
-        send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
-        
-    return None
-
 def get_download_url_from_pixeldrain_api(url):
     print("Memproses URL Pixeldrain menggunakan API...")
     file_id = url.split('/')[-1]
@@ -440,3 +343,75 @@ def human_readable_to_bytes(size_str):
     }
     
     return int(size_value * unit_multipliers.get(size_unit, 1))
+
+def download_file_with_aria2c(url, referer=None):
+    """Mengunduh file menggunakan aria2c dengan dukungan referer."""
+    print(f"Mengunduh file dengan aria2c: {url}")
+    
+    filename = url.split('/')[-1]
+    if '?' in filename:
+        filename = filename.split('?')[0]
+    
+    download_dir = os.getcwd()
+
+    initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
+    
+    try:
+        command = [
+            'aria2c',
+            '--allow-overwrite',
+            '--auto-file-renaming=false',
+            '--dir', download_dir,
+            '-x', '16',
+            '-s', '16',
+            '--continue',
+        ]
+        
+        if referer:
+            command.extend(['--referer', referer])
+            
+        command.append(url)
+        
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=False, # Penting: baca sebagai byte
+        )
+        
+        last_percent_notified = -1
+        
+        # Baca output secara terus-menerus
+        while process.poll() is None:
+            output = process.stdout.read(1024)
+            if output:
+                # Cari persentase dalam byte string
+                progress_regex = re.search(b'(\\d+\\.\\d+)%', output)
+                if progress_regex:
+                    current_percent = int(float(progress_regex.group(1)))
+                    
+                    if current_percent >= last_percent_notified + 5 or current_percent == 100:
+                        last_percent_notified = current_percent
+                        progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
+                        edit_telegram_message(initial_message_id, progress_message)
+            time.sleep(1)
+        
+        process.wait()
+        if process.returncode != 0:
+            error_output = process.stderr.read().decode('utf-8')
+            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
+            
+        print(f"File berhasil diunduh ke: {os.path.join(download_dir, filename)}")
+        return filename
+        
+    except FileNotFoundError:
+        print("aria2c tidak ditemukan. Pastikan sudah terinstal dan ada di PATH.")
+        send_telegram_message("❌ **`aria2c` tidak ditemukan.**\n\nPastikan `aria2c` sudah terinstal.")
+    except subprocess.CalledProcessError as e:
+        print(f"aria2c gagal: {e.stderr.strip()}")
+        send_telegram_message(f"❌ **`aria2c` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengunduh dengan aria2c: {e}")
+        send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
+        
+    return None
