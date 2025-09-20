@@ -184,7 +184,7 @@ def get_download_url_with_yt_dlp(url):
             return download_url
     except subprocess.CalledProcessError as e:
         print(f"yt-dlp gagal: {e.stderr.strip()}")
-        send_telegram_message(f"❌ `yt-dlp` gagal memproses URL.\n\nDetail: {e.stderr.strip()[:200]}...")
+        #send_telegram_message(f"❌ `yt-dlp` gagal memproses URL.\n\nDetail: {e.stderr.strip()[:200]}...")
     except FileNotFoundError:
         print("yt-dlp tidak ditemukan.")
     
