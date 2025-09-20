@@ -174,7 +174,7 @@ def download_file_with_selenium_gofile(url):
         # Tunggu hingga file muncul di direktori unduhan
         file_path = os.path.join(download_dir, filename)
         
-        timeout = 600 # 10 menit
+        timeout = 60 # 1menit
         start_time = time.time()
         
         while not os.path.exists(file_path):
