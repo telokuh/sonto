@@ -164,7 +164,6 @@ def download_file_with_selenium_gofile(url):
         filename = download_link.text.strip()
         print(f"Nama file yang diharapkan: {filename}")
         
-        # --- Bagian yang Diperbarui: Gunakan selektor baru untuk ukuran ---
         file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2)"
         file_size_element = driver.find_element(By.CSS_SELECTOR, file_size_selector)
         size_text = file_size_element.text.strip()
@@ -218,7 +217,74 @@ def download_file_with_selenium_gofile(url):
         if os.path.exists(download_dir):
             shutil.rmtree(download_dir, ignore_errors=True)
 
-# ... (kode download_file_with_megatools yang sudah ada) ...
+def download_file_with_megatools(url):
+    print(f"Mengunduh file dari MEGA dengan megatools: {url}")
+    original_cwd = os.getcwd()
+    temp_dir = tempfile.mkdtemp()
+    
+    initial_message_id = send_telegram_message("⬇️ **Mulai mengunduh...**\n`megatools` sedang mengunduh file.")
+
+    try:
+        os.chdir(temp_dir)
+        process = subprocess.Popen(
+            ['megatools', 'dl', url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        total_size = 0
+        last_percent_notified = 0
+        progress_regex = re.compile(r'(\d+\.\d+)%\s+of\s+.*\((\d+\.\d+)\s*(\wB)\)')
+
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            
+            match = progress_regex.search(line)
+            if match:
+                current_percent = math.floor(float(match.group(1)))
+                current_size_str = match.group(2)
+                current_unit = match.group(3)
+
+                if total_size == 0:
+                    total_size = f"{current_size_str} {current_unit}"
+                    
+                if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                    last_percent_notified = current_percent
+                    progress_message = f"⬇️ **Mulai mengunduh...**\nUkuran file: `{total_size}`\n\nProgres: `{current_percent}%`"
+                    edit_telegram_message(initial_message_id, progress_message)
+
+        process.wait()
+        if process.returncode != 0:
+            error_output = process.stderr.read()
+            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
+
+        downloaded_files = os.listdir('.')
+        if len(downloaded_files) == 1:
+            filename = downloaded_files[0]
+            print(f"File berhasil diunduh sebagai: {filename}")
+            return filename
+        else:
+            print(f"Gagal menemukan file yang baru diunduh. Jumlah file: {len(downloaded_files)}")
+            print("File di direktori:", downloaded_files)
+            return None
+            
+    except subprocess.CalledProcessError as e:
+        print(f"megatools gagal: {e.stderr.strip()}")
+        send_telegram_message(f"❌ **`megatools` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
+    except FileNotFoundError:
+        print("megatools tidak ditemukan.")
+    except Exception as e:
+        print(f"Terjadi kesalahan: {e}")
+    finally:
+        os.chdir(original_cwd)
+        if 'filename' in locals() and os.path.exists(os.path.join(temp_dir, filename)):
+            shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    return None
 
 def download_file_with_aria2c(url, referer=None):
     """Mengunduh file menggunakan aria2c dengan dukungan referer."""
