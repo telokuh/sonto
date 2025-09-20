@@ -58,13 +58,14 @@ def download_file_with_selenium_gofile(url):
         print(f"Nama file yang diharapkan: {filename}")
         
         # --- Bagian yang Diperbarui: Tambahkan waktu tunggu untuk selektor ukuran ---
-        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2)"
+        file_size_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > div > div:nth-child(2) > span"
         
         try:
             file_size_element = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, file_size_selector))
             )
             size_text = file_size_element.text.strip()
+            print(size_text)
             total_size = human_readable_to_bytes(size_text)
         except TimeoutException:
             print("Peringatan: Elemen ukuran file tidak ditemukan. Progres unduhan tidak akan ditampilkan.")
