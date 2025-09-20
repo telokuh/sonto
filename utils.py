@@ -287,16 +287,14 @@ def human_readable_size(size_bytes):
 
 # ... (bagian impor dan fungsi lain) ...
 
-def download_file_with_aria2c(url):
-    """Mengunduh file menggunakan aria2c dan memantau progresnya."""
+def download_file_with_aria2c(url, referer=None):
+    """Mengunduh file menggunakan aria2c dengan dukungan referer."""
     print(f"Mengunduh file dengan aria2c: {url}")
     
-    # Dapatkan nama file dari URL
     filename = url.split('/')[-1]
     if '?' in filename:
         filename = filename.split('?')[0]
     
-    # Tentukan direktori unduhan, misalnya direktori saat ini
     download_dir = os.getcwd()
 
     initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
@@ -306,12 +304,16 @@ def download_file_with_aria2c(url):
             'aria2c',
             '--allow-overwrite',
             '--auto-file-renaming=false',
-            '--dir', download_dir, # <-- Tambahkan ini untuk menentukan direktori
+            '--dir', download_dir,
             '-x', '16',
             '-s', '16',
             '--continue',
-            url
         ]
+        
+        if referer:
+            command.extend(['--referer', referer]) # <-- Tambahkan header referer
+            
+        command.append(url)
         
         process = subprocess.Popen(
             command,
@@ -322,7 +324,6 @@ def download_file_with_aria2c(url):
 
         last_percent_notified = -1
         
-        # Regex untuk mengekstrak progres dari output aria2c
         progress_regex = re.compile(r'\[.+?\]\s+(\d+\.\d+)%.*?\(\d+/\d+\)')
         
         for line in iter(process.stdout.readline, ''):
@@ -354,3 +355,5 @@ def download_file_with_aria2c(url):
         send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
         
     return None
+
+# ... (lanjutan kode di utils.py) ...
