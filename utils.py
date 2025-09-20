@@ -14,7 +14,6 @@ import tempfile
 import shutil
 import glob
 import math
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -130,68 +129,69 @@ def get_download_url_with_selenium(url):
         if driver:
             driver.quit()
 
-def get_download_url_with_selenium_gofile(url):
-    print("Mencoba mendapatkan URL unduhan Gofile dengan nama file dari log jaringan...")
-    send_telegram_message("🔄 Mencari URL unduhan GoFile dengan mencocokkan nama file.")
+def download_file_with_selenium_gofile(url):
+    print("Mencoba mengunduh file Gofile dengan Selenium...")
+    send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
     driver = None
+    download_dir = os.path.join(os.getcwd(), 'downloads')
+    
+    # Buat direktori unduhan jika belum ada
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
     try:
-        # Menyiapkan opsi Chrome
         service = Service(ChromeDriverManager().install())
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
-        # --- Perbaikan: Mengatur logging preferences menggunakan set_capability ---
-        options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
-        
+        # Mengatur preferensi unduhan untuk Chrome
+        prefs = {
+            "download.default_directory": download_dir,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True
+        }
+        options.add_experimental_option("prefs", prefs)
+
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        # Tunggu hingga tautan unduhan muncul dan dapatkan nama file dari teksnya
+        # Tunggu hingga tautan unduhan muncul
         download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
         download_link = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
         )
         
-        # Dapatkan nama file dari teks tautan dan bersihkan spasi tambahan
+        # Dapatkan nama file dari teks tautan
         filename = download_link.text.strip()
-        print(f"Nama file yang ditemukan: {filename}")
-
-        # Cetak outerHTML dari elemen yang akan diklik untuk debugging
-        outer_html = download_link.get_attribute("outerHTML")
-        print("--------------------")
-        print("OuterHTML dari elemen yang diklik:")
-        print(outer_html)
-        print("--------------------")
+        print(f"Nama file yang diharapkan: {filename}")
         
         # Klik tautan unduhan
         download_link.click()
         
-        # Beri sedikit waktu untuk permintaan jaringan terpicu
-        time.sleep(5)
+        # Tunggu hingga file muncul di direktori unduhan
+        file_path = os.path.join(download_dir, filename)
         
-        # Ambil log performa
-        performance_logs = driver.get_log('performance')
+        timeout = 600 # 10 menit
+        start_time = time.time()
         
-        # Cari URL unduhan dari log
-        for log in performance_logs:
-            try:
-                message = json.loads(log['message'])['message']
-                if message['method'] == 'Network.requestWillBeSent':
-                    request_url = message['params']['request']['url']
-                    # Cek apakah URL berisi nama file
-                    if filename in request_url:
-                        print(f"URL unduhan ditemukan di log: {request_url}")
-                        return request_url
-            except (json.JSONDecodeError, KeyError):
-                continue
-                    
-        raise Exception("Tidak dapat menemukan URL unduhan yang valid di log jaringan.")
+        while not os.path.exists(file_path):
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Waktu unduhan habis.")
+            time.sleep(1)
+        
+        # Pindahkan file dari direktori downloads ke direktori kerja utama
+        final_path = os.path.join(os.getcwd(), filename)
+        shutil.move(file_path, final_path)
+        
+        print(f"File berhasil diunduh sebagai: {final_path}")
+        return filename
             
     except Exception as e:
-        print(f"Terjadi kesalahan saat menggunakan Selenium untuk Gofile: {e}")
-        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan GoFile.\n\nDetail: {str(e)[:150]}...")
+        print(f"Terjadi kesalahan saat mengunduh Gofile dengan Selenium: {e}")
+        send_telegram_message(f"❌ Gagal mengunduh file GoFile.\n\nDetail: {str(e)[:150]}...")
         if driver:
             driver.save_screenshot("gofile_error_screenshot.png")
             print("Screenshot gofile_error_screenshot.png telah dibuat.")
@@ -199,6 +199,9 @@ def get_download_url_with_selenium_gofile(url):
     finally:
         if driver:
             driver.quit()
+        # Bersihkan direktori unduhan sementara jika ada
+        if os.path.exists(download_dir):
+            shutil.rmtree(download_dir, ignore_errors=True)
 
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
@@ -269,24 +272,6 @@ def download_file_with_megatools(url):
     
     return None
 
-
-def get_download_url_from_pixeldrain_api(url):
-    print("Memproses URL Pixeldrain menggunakan API...")
-    file_id = url.split('/')[-1]
-    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
-    return download_url
-
-def human_readable_size(size_bytes):
-    if size_bytes is None or size_bytes == 0:
-        return "0B"
-    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    p = math.pow(1024, i)
-    s = round(size_bytes / p, 2)
-    return f"{s} {size_name[i]}"
-
-# ... (bagian impor dan fungsi lain) ...
-
 def download_file_with_aria2c(url, referer=None):
     """Mengunduh file menggunakan aria2c dengan dukungan referer."""
     print(f"Mengunduh file dengan aria2c: {url}")
@@ -311,7 +296,7 @@ def download_file_with_aria2c(url, referer=None):
         ]
         
         if referer:
-            command.extend(['--referer', referer]) # <-- Tambahkan header referer
+            command.extend(['--referer', referer])
             
         command.append(url)
         
@@ -356,4 +341,17 @@ def download_file_with_aria2c(url, referer=None):
         
     return None
 
-# ... (lanjutan kode di utils.py) ...
+def get_download_url_from_pixeldrain_api(url):
+    print("Memproses URL Pixeldrain menggunakan API...")
+    file_id = url.split('/')[-1]
+    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+    return download_url
+
+def human_readable_size(size_bytes):
+    if size_bytes is None or size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
