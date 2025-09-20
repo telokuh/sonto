@@ -80,8 +80,8 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-         tag_name: release-1
-         name: Automatic  ${{ github.run_number }}
+         tag_name: release-${{ github.run_number }}
+         name: File ${{ steps.get_filename.outputs.file_name }}
          body: |
           Rilis 
           File: ${{ steps.get_filename.outputs.file_name }}
