@@ -81,7 +81,7 @@ def download_file_with_selenium_gofile(url):
         
         file_path = os.path.join(download_dir, filename)
         
-        timeout = 600
+        timeout = 180
         start_time = time.time()
         last_percent_notified = 0
         
