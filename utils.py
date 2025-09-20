@@ -37,6 +37,7 @@ def download_file_with_selenium_gofile(url):
         options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--incognito')
         
         prefs = {
             "download.default_directory": download_dir,
@@ -81,7 +82,7 @@ def download_file_with_selenium_gofile(url):
         
         file_path = os.path.join(download_dir, filename)
         
-        timeout = 180
+        timeout = 60
         start_time = time.time()
         last_percent_notified = 0
         
