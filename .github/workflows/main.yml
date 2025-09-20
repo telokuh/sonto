@@ -31,7 +31,7 @@ jobs:
       - name: Install Python dependencies
         run: |
            pip install -r requirements.txt
-           sudo apt-get install aria2 -y
+           #sudo apt-get install aria2 -y
 
            
       - name: Cache megatools
@@ -80,11 +80,10 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-         tag_name: release-${{ github.run_number }}
-         name: Automatic MediaFire Download ${{ github.run_number }}
+         tag_name: release-1
+         name: Automatic  ${{ github.run_number }}
          body: |
-          Rilis otomatis dari MediaFire.
-          URL: ${{ github.event.client_payload.url }}
+          Rilis 
           File: ${{ steps.get_filename.outputs.file_name }}
          files: ${{ steps.get_filename.outputs.file_name }}
         env:
