@@ -129,84 +129,7 @@ def get_download_url_with_selenium(url):
         if driver:
             driver.quit()
 
-# ... (kode impor dan fungsi lain) ...
-def download_file_with_selenium_gofile(url):
-    print("Mencoba mengunduh file Gofile dengan Selenium...")
-    send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
-    driver = None
-    download_dir = os.path.join(os.getcwd(), 'downloads')
-    
-    # Buat direktori unduhan jika belum ada
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
 
-    try:
-        service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
-        # Mengatur preferensi unduhan untuk Chrome
-        prefs = {
-            "download.default_directory": download_dir,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-        options.add_experimental_option("prefs", prefs)
-
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
-
-        # Tunggu hingga tautan unduhan muncul
-        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
-        download_link = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
-        )
-        
-        # Dapatkan nama file dari teks tautan
-        filename = download_link.text.strip()
-        print(f"Nama file yang diharapkan: {filename}")
-        
-        # Klik tautan unduhan
-        download_link.click()
-        
-        # --- Tambahan Baru: Memantau direktori untuk file yang diunduh ---
-        file_path = os.path.join(download_dir, filename)
-        
-        timeout = 120  # 10 menit
-        start_time = time.time()
-        
-        while not os.path.exists(file_path):
-            if time.time() - start_time > timeout:
-                raise TimeoutError("Waktu unduhan habis.")
-            # Cek setiap 2 detik
-            time.sleep(2)
-        
-        print(f"File berhasil diunduh sebagai: {file_path}")
-        
-        # Pindahkan file dari direktori downloads ke direktori kerja utama
-        final_path = os.path.join(os.getcwd(), filename)
-        shutil.move(file_path, final_path)
-        
-        print(f"File berhasil diunduh sebagai: {final_path}")
-        return filename
-            
-    except Exception as e:
-        print(f"Terjadi kesalahan saat mengunduh Gofile dengan Selenium: {e}")
-        send_telegram_message(f"❌ Gagal mengunduh file GoFile.\n\nDetail: {str(e)[:150]}...")
-        if driver:
-            driver.save_screenshot("gofile_error_screenshot.png")
-            print("Screenshot gofile_error_screenshot.png telah dibuat.")
-        return None
-    finally:
-        if driver:
-            driver.quit()
-        # Bersihkan direktori unduhan sementara jika ada
-        if os.path.exists(download_dir):
-            shutil.rmtree(download_dir, ignore_errors=True)
-            
 def download_file_with_megatools(url):
     print(f"Mengunduh file dari MEGA dengan megatools: {url}")
     original_cwd = os.getcwd()
@@ -359,3 +282,111 @@ def human_readable_size(size_bytes):
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
     return f"{s} {size_name[i]}"
+
+# ... (kode impor dan fungsi lain) ...
+
+def download_file_with_selenium_gofile(url):
+    print("Mencoba mengunduh file Gofile dengan Selenium...")
+    send_telegram_message("🔄 Mengunduh file GoFile langsung dengan Selenium.")
+    driver = None
+    download_dir = os.path.join(os.getcwd(), 'downloads')
+    
+    # Buat direktori unduhan jika belum ada
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    try:
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        prefs = {
+            "download.default_directory": download_dir,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True
+        }
+        options.add_experimental_option("prefs", prefs)
+        
+        # Opsi ini akan mengaktifkan logging jaringan
+        options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
+
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+
+        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        download_link = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
+        )
+        
+        filename = download_link.text.strip()
+        print(f"Nama file yang diharapkan: {filename}")
+        
+        download_link.click()
+        
+        # --- Bagian Baru: Mendapatkan Total Ukuran File dari Log Jaringan ---
+        time.sleep(5)
+        total_size = 0
+        performance_logs = driver.get_log('performance')
+        for log in performance_logs:
+            try:
+                message = json.loads(log['message'])['message']
+                if message['method'] == 'Network.responseReceived':
+                    response_url = message['params']['response']['url']
+                    if filename in response_url:
+                        total_size = message['params']['response']['headers'].get('Content-Length')
+                        if total_size:
+                            total_size = int(total_size)
+                            break
+            except (json.JSONDecodeError, KeyError):
+                continue
+        
+        total_size_human = human_readable_size(total_size)
+        
+        initial_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `0%`"
+        message_id = send_telegram_message(initial_message)
+
+        # --- Bagian Baru: Memantau Ukuran File secara Real-time ---
+        file_path = os.path.join(download_dir, filename)
+        
+        timeout = 600
+        start_time = time.time()
+        
+        last_percent_notified = 0
+        
+        while not os.path.exists(file_path) or os.path.getsize(file_path) < total_size:
+            if time.time() - start_time > timeout:
+                raise TimeoutError("Waktu unduhan habis.")
+            
+            if os.path.exists(file_path) and total_size > 0:
+                downloaded_size = os.path.getsize(file_path)
+                current_percent = int((downloaded_size / total_size) * 100)
+                
+                if current_percent >= last_percent_notified + 10 or current_percent == 100:
+                    last_percent_notified = current_percent
+                    progress_message = f"⬇️ **Mulai mengunduh...**\n`{filename}`\nUkuran file: `{total_size_human}`\n\nProgres: `{current_percent}%`"
+                    edit_telegram_message(message_id, progress_message)
+            
+            time.sleep(2)
+        
+        # Pindahkan file setelah unduhan selesai
+        final_path = os.path.join(os.getcwd(), filename)
+        shutil.move(file_path, final_path)
+        
+        print(f"File berhasil diunduh sebagai: {final_path}")
+        return filename
+            
+    except Exception as e:
+        print(f"Terjadi kesalahan saat mengunduh Gofile dengan Selenium: {e}")
+        send_telegram_message(f"❌ Gagal mengunduh file GoFile.\n\nDetail: {str(e)[:150]}...")
+        if driver:
+            driver.save_screenshot("gofile_error_screenshot.png")
+            print("Screenshot gofile_error_screenshot.png telah dibuat.")
+        return None
+    finally:
+        if driver:
+            driver.quit()
+        if os.path.exists(download_dir):
+            shutil.rmtree(download_dir, ignore_errors=True)
