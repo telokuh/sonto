@@ -19,6 +19,81 @@ import math
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
+
+# ... (kode impor yang sudah ada) ...
+
+def get_download_url_with_selenium_gofile(url):
+    print("Mencoba mendapatkan URL unduhan Gofile dengan Selenium...")
+    send_telegram_message("🔄 Mencari URL unduhan GoFile dengan Selenium.")
+    driver = None
+    try:
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+
+        # Tunggu hingga tautan unduhan muncul dan dapat diklik
+        download_link_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        download_link = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_link_selector))
+        )
+        
+        # Simpan URL sebelum klik
+        initial_url = driver.current_url
+
+        # Klik tautan unduhan
+        download_link.click()
+        
+        # Tambahkan jeda waktu singkat untuk memungkinkan URL unduhan dimuat
+        time.sleep(3)
+        
+        # Coba lagi untuk mendapatkan URL unduhan dari atribut href,
+        # mungkin saja atributnya berubah
+        final_download_link = driver.find_element(By.CSS_SELECTOR, download_link_selector)
+        final_href = final_download_link.get_attribute("href")
+        
+        if final_href and final_href.startswith("http"):
+            print("Selenium berhasil menemukan URL unduhan Gofile setelah diklik.")
+            return final_href
+            
+        # Jika href masih 'javascript:void', coba dapatkan dari URL halaman saat ini
+        # Ini akan berhasil jika mengklik tautan menyebabkan pengalihan (redirect)
+        if driver.current_url != initial_url and driver.current_url.startswith("http"):
+            print("Selenium berhasil menemukan URL unduhan Gofile dari URL redirect.")
+            return driver.current_url
+
+        # Jika masih gagal, coba cari elemen tautan unduhan lain yang mungkin muncul
+        # setelah klik. Ini adalah contoh, mungkin perlu disesuaikan.
+        try:
+            new_download_link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a[download]"))
+            )
+            download_url_new = new_download_link.get_attribute("href")
+            if download_url_new and download_url_new.startswith("http"):
+                print("Selenium berhasil menemukan URL unduhan Gofile dari tautan baru.")
+                return download_url_new
+        except:
+            pass # Lanjutkan jika elemen tidak ditemukan
+            
+        raise Exception("Gagal menemukan URL unduhan Gofile setelah klik.")
+            
+    except Exception as e:
+        print(f"Terjadi kesalahan saat menggunakan Selenium untuk Gofile: {e}")
+        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan GoFile.\n\nDetail: {str(e)[:150]}...")
+        if driver:
+            driver.save_screenshot("gofile_error_screenshot.png")
+            print("Screenshot gofile_error_screenshot.png telah dibuat.")
+        return None
+    finally:
+        if driver:
+            driver.quit()
+
+# ... (lanjutan kode utils.py yang sudah ada) ...
+
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
