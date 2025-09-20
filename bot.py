@@ -70,7 +70,7 @@ async def handle_url(client, message):
             )
 
             if response.status_code == 204:
-                await message.reply_text("✅ Berhasil dikirim ke GitHub Actions!")
+                await message.reply_text("📥 processing")
             else:
                 await message.reply_text(f"❌ Gagal mengirim ke GitHub Actions. Status: {response.status_code}\nRespons: {response.text}")
         except Exception as e:
