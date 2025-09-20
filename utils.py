@@ -14,7 +14,6 @@ import tempfile
 import shutil
 import glob
 import math
-import fcntl
 
 
 # Ambil token bot dan chat ID dari environment variables
@@ -344,74 +343,33 @@ def human_readable_to_bytes(size_str):
     
     return int(size_value * unit_multipliers.get(size_unit, 1))
 
+
 def download_file_with_aria2c(url, referer=None):
-    """Mengunduh file menggunakan aria2c dengan dukungan referer."""
-    print(f"Mengunduh file dengan aria2c: {url}")
+    """
+    Mengunduh file menggunakan skrip bash eksternal untuk aria2c.
+    """
+    print(f"Mengunduh file dengan skrip bash aria2c: {url}")
     
     filename = url.split('/')[-1]
     if '?' in filename:
         filename = filename.split('?')[0]
     
-    download_dir = os.getcwd()
-
+    # Kirim pesan awal ke Telegram dan dapatkan message_id
     initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
     
+    # Panggil skrip bash untuk memulai unduhan
     try:
-        command = [
-            'aria2c',
-            '--allow-overwrite',
-            '--auto-file-renaming=false',
-            '--dir', download_dir,
-            '-x', '16',
-            '-s', '16',
-            '--continue',
-        ]
-        
-        if referer:
-            command.extend(['--referer', referer])
-            
-        command.append(url)
-        
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False, # Penting: baca sebagai byte
+        subprocess.run(
+            ['bash', './download.sh', url, str(initial_message_id), os.environ.get("BOT_TOKEN"), os.environ.get("OWNER_ID")],
+            check=True
         )
-        
-        last_percent_notified = -1
-        
-        # Baca output secara terus-menerus
-        while process.poll() is None:
-            output = process.stdout.read(1024)
-            if output:
-                # Cari persentase dalam byte string
-                progress_regex = re.search(b'(\\d+\\.\\d+)%', output)
-                if progress_regex:
-                    current_percent = int(float(progress_regex.group(1)))
-                    
-                    if current_percent >= last_percent_notified + 5 or current_percent == 100:
-                        last_percent_notified = current_percent
-                        progress_message = f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`\n\nProgres: `{current_percent}%`"
-                        edit_telegram_message(initial_message_id, progress_message)
-            time.sleep(1)
-        
-        process.wait()
-        if process.returncode != 0:
-            error_output = process.stderr.read().decode('utf-8')
-            raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
-            
-        print(f"File berhasil diunduh ke: {os.path.join(download_dir, filename)}")
+        print("Skrip bash berhasil dieksekusi.")
         return filename
-        
-    except FileNotFoundError:
-        print("aria2c tidak ditemukan. Pastikan sudah terinstal dan ada di PATH.")
-        send_telegram_message("❌ **`aria2c` tidak ditemukan.**\n\nPastikan `aria2c` sudah terinstal.")
     except subprocess.CalledProcessError as e:
-        print(f"aria2c gagal: {e.stderr.strip()}")
-        send_telegram_message(f"❌ **`aria2c` gagal mengunduh file.**\n\nDetail: {e.stderr.strip()[:200]}...")
-    except Exception as e:
-        print(f"Terjadi kesalahan saat mengunduh dengan aria2c: {e}")
-        send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
-        
-    return None
+        print(f"Skrip bash gagal: {e}")
+        send_telegram_message(f"❌ **Skrip bash gagal.**\n\nDetail: {e}")
+        return None
+    except FileNotFoundError:
+        print("download.sh tidak ditemukan. Pastikan file ada di direktori yang sama.")
+        send_telegram_message("❌ **Skrip bash tidak ditemukan.**\n\nPastikan `download.sh` ada di direktori yang benar.")
+        return None
