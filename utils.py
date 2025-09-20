@@ -269,6 +269,24 @@ def download_file_with_megatools(url):
     
     return None
 
+
+def get_download_url_from_pixeldrain_api(url):
+    print("Memproses URL Pixeldrain menggunakan API...")
+    file_id = url.split('/')[-1]
+    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+    return download_url
+
+def human_readable_size(size_bytes):
+    if size_bytes is None or size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    return f"{s} {size_name[i]}"
+
+# ... (bagian impor dan fungsi lain) ...
+
 def download_file_with_aria2c(url):
     """Mengunduh file menggunakan aria2c dan memantau progresnya."""
     print(f"Mengunduh file dengan aria2c: {url}")
@@ -278,6 +296,9 @@ def download_file_with_aria2c(url):
     if '?' in filename:
         filename = filename.split('?')[0]
     
+    # Tentukan direktori unduhan, misalnya direktori saat ini
+    download_dir = os.getcwd()
+
     initial_message_id = send_telegram_message(f"⬇️ **Mulai mengunduh...**\n`aria2c` sedang mengunduh file:\n`{filename}`")
     
     try:
@@ -285,6 +306,7 @@ def download_file_with_aria2c(url):
             'aria2c',
             '--allow-overwrite',
             '--auto-file-renaming=false',
+            '--dir', download_dir, # <-- Tambahkan ini untuk menentukan direktori
             '-x', '16',
             '-s', '16',
             '--continue',
@@ -318,7 +340,7 @@ def download_file_with_aria2c(url):
             error_output = process.stderr.read()
             raise subprocess.CalledProcessError(process.returncode, process.args, stderr=error_output)
             
-        print(f"File berhasil diunduh sebagai: {filename}")
+        print(f"File berhasil diunduh ke: {os.path.join(download_dir, filename)}")
         return filename
         
     except FileNotFoundError:
@@ -332,18 +354,3 @@ def download_file_with_aria2c(url):
         send_telegram_message(f"❌ **Terjadi kesalahan saat mengunduh.**\n\nDetail: {str(e)[:150]}...")
         
     return None
-
-def get_download_url_from_pixeldrain_api(url):
-    print("Memproses URL Pixeldrain menggunakan API...")
-    file_id = url.split('/')[-1]
-    download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
-    return download_url
-
-def human_readable_size(size_bytes):
-    if size_bytes is None or size_bytes == 0:
-        return "0B"
-    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
-    i = int(math.floor(math.log(size_bytes, 1024)))
-    p = math.pow(1024, i)
-    s = round(size_bytes / p, 2)
-    return f"{s} {size_name[i]}"
