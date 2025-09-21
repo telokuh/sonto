@@ -12,7 +12,22 @@ ch_id=$4
 
 last_percentage=-1
 
-# Fungsi untuk memperbarui pesan Telegram
+# --- Fungsi untuk mendapatkan nama file dari URL ---
+get_filename_from_url() {
+    local url="$1"
+    
+    # Coba dapatkan nama file dari header Content-Disposition
+    local filename=$(curl -sI -L "$url" | grep -i "Content-Disposition" | sed -n 's/.*filename="\(.*\)"/\1/p' | tr -d '\n\r')
+
+    # Jika nama file dari header kosong, coba dapatkan dari URL
+    if [ -z "$filename" ]; then
+        filename=$(basename "$url" | sed 's/\?.*//')
+    fi
+    
+    echo "$filename"
+}
+
+# --- Fungsi untuk memperbarui pesan Telegram ---
 update_telegram() {
     local percentage="$1"
     curl -s "https://api.telegram.org/bot${TG_TOKEN}/editMessageText" \
@@ -22,9 +37,13 @@ update_telegram() {
 echo "Mulai unduhan dengan aria2c..."
 echo "URL: $url"
 
-# Jalankan aria2c dengan buffering baris
-# aria2c akan mengeluarkan output per baris, bukan per blok
-stdbuf -oL aria2c "$url" -x 16 -s 16 -c 2>&1 | while IFS= read -r line; do
+# Dapatkan nama file yang benar sebelum memulai unduhan
+FILENAME=$(get_filename_from_url "$url")
+
+echo "Nama file yang akan diunduh: $FILENAME"
+
+# Jalankan aria2c dan proses outputnya
+stdbuf -oL aria2c "$url" -x 16 -s 16 -c -o "$FILENAME" 2>&1 | while IFS= read -r line; do
     
     # Cari persentase dalam baris output
     if [[ "$line" =~ ([0-9]+\.[0-9]+%) ]]; then
