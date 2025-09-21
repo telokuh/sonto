@@ -266,7 +266,6 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
-
 def get_download_url_from_gofile(url):
     print("Mencoba mendapatkan URL unduhan dari Gofile menggunakan log jaringan Selenium...")
     # send_telegram_message("🔄 Menggunakan Selenium untuk menemukan URL unduhan Gofile.")
@@ -289,24 +288,28 @@ def get_download_url_from_gofile(url):
         )
         
         download_button.click()
-        time.sleep(2)
-        logs = driver.get_log('performance')
         
+        # --- Logika Retry: Cari URL unduhan hingga 5 kali ---
         download_info = None
-        for log in logs:
-            message = json.loads(log['message'])
-            if 'params' in message and 'request' in message['params']:
-                request_url = message['params']['request']['url']
-                
-                # --- Logika yang Diperbarui: Tambahkan pola URL `/download/web/` ---
-                if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
+        for attempt in range(5):
+            print(f"Percobaan ke-{attempt + 1}: Mencari URL di log jaringan...")
+            time.sleep(1) # Tunggu 1 detik agar log terisi
+            logs = driver.get_log('performance')
+            
+            for log in logs:
+                message = json.loads(log['message'])
+                if 'params' in message and 'request' in message['params']:
+                    request_url = message['params']['request']['url']
                     
-                    print(f"URL Unduhan Ditemukan di log: {request_url}") # Mencetak URL
-                    
-                    request_headers = message['params']['request']['headers']
-                    download_info = {'url': request_url, 'headers': request_headers}
-                    break
-        
+                    if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
+                        print(f"URL Unduhan Ditemukan di log: {request_url}")
+                        request_headers = message['params']['request']['headers']
+                        download_info = {'url': request_url, 'headers': request_headers}
+                        break
+            
+            if download_info:
+                break # Keluar dari loop jika URL sudah ditemukan
+
         if download_info:
             return download_info
         else:
@@ -321,4 +324,3 @@ def get_download_url_from_gofile(url):
     finally:
         if driver:
             driver.quit()
-
