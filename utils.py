@@ -266,23 +266,23 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
-
 def get_download_url_from_gofile(url):
-    print("Mencari URL unduhan Gofile dengan pendekatan paling andal...")
-    # send_telegram_message("🔄 Menggunakan Selenium untuk menemukan URL unduhan Gofile.")
+    print("Mencari URL unduhan Gofile dari log konsol...")
     driver = None
     
     try:
         service = Service(ChromeDriverManager().install())
         options = webdriver.ChromeOptions()
-        #options.add_argument('--headless')
+        options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
-        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+        # Mengaktifkan log konsol
+        options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
-        time.sleep(2)
+
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
@@ -290,44 +290,42 @@ def get_download_url_from_gofile(url):
         
         download_button.click()
         
-        download_info = None
+        # --- Solusi Baru: Cari di log konsol ---
+        download_url = None
         start_time = time.time()
-        timeout = 6
+        timeout = 6 # Atur batas waktu
         
         while time.time() - start_time < timeout:
-            print("Mencari URL di log jaringan...")
+            print("Mencari JSON unduhan di log konsol...")
             time.sleep(2)
             
-            logs = driver.get_log('performance')
+            logs = driver.get_log('browser')
             
-            # --- Bagian yang Ditambahkan: Mencetak SEMUA URL ---
-            print("\n--- Semua URL dari Log Jaringan ---")
             for log in logs:
-                message = json.loads(log['message'])
-                if 'params' in message and 'request' in message['params']:
-                    request_url = message['params']['request']['url']
-                    print(request_url)
-            print("-----------------------------------\n")
-
-            # --- Bagian Logika Pencarian yang Sudah Ada ---
-            for log in logs:
-                message = json.loads(log['message'])
-                if 'params' in message and 'request' in message['params']:
-                    request_url = message['params']['request']['url']
+                try:
+                    # Coba parsing setiap pesan log sebagai JSON
+                    message = json.loads(log['message'].split(' ', 1)[1])
                     
-                    if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
-                        print(f"URL Unduhan Ditemukan di log: {request_url}")
-                        request_headers = message['params']['request']['headers']
-                        download_info = {'url': request_url, 'headers': request_headers}
-                        break
+                    # Cek apakah ini adalah JSON yang kita cari
+                    if 'data' in message and 'children' in message['data']:
+                        children = message['data']['children']
+                        # Ambil URL dari objek pertama di children
+                        first_child_key = next(iter(children))
+                        download_url = children[first_child_key]['link']
+                        
+                        if download_url:
+                            print(f"URL unduhan ditemukan di log konsol: {download_url}")
+                            break
+                except (json.JSONDecodeError, KeyError):
+                    continue # Abaikan log yang bukan JSON atau tidak memiliki format yang tepat
             
-            if download_info:
+            if download_url:
                 break
         
-        if download_info:
-            return download_info
+        if download_url:
+            return download_url
         else:
-            raise Exception("URL unduhan tidak ditemukan di log jaringan dalam waktu yang ditentukan.")
+            raise Exception("URL unduhan tidak ditemukan di log konsol dalam waktu yang ditentukan.")
 
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
