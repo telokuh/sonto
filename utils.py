@@ -268,9 +268,9 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
 
 
 def get_download_url_from_gofile(url):
-    print("Mencari URL unduhan Gofile dari log jaringan...")
+    print("Mencari URL unduhan GoFile dari log jaringan, fokus pada permintaan fetch/XHR...")
     driver = None
-    
+
     try:
         service = Service(ChromeDriverManager().install())
         options = webdriver.ChromeOptions()
@@ -284,12 +284,10 @@ def get_download_url_from_gofile(url):
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        # --- Selector klik yang baru
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button > i"
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
-        
         download_button.click()
         
         download_info = None
@@ -297,29 +295,28 @@ def get_download_url_from_gofile(url):
         timeout = 20
         
         while time.time() - start_time < timeout:
-            print("\n--- Mencari di log jaringan ---")
+            print("\n--- Mencari permintaan fetch/XHR di log jaringan ---")
             time.sleep(2)
             
             logs = driver.get_log('performance')
             
-            # --- Bagian yang ditambahkan: Cetak URL yang diawali 'http' saja
-            
-            print("Isi log yang difilter:")
-            
-            filtered_logs = []
+            found_requests = []
             for log in logs:
                 message = json.loads(log['message'])
                 if 'params' in message and 'request' in message['params']:
                     request_url = message['params']['request']['url']
-                    if request_url.startswith('http'):
-                        filtered_logs.append(request_url)
-            
-            for f_log in filtered_logs:
-                print(f_log)
+                    resource_type = message['params']['request'].get('resourceType')
+                    
+                    if resource_type in ['xhr', 'fetch']:
+                        found_requests.append({'url': request_url, 'type': resource_type})
+
+            if found_requests:
+                print(f"Ditemukan {len(found_requests)} permintaan fetch/XHR.")
+                for req in found_requests:
+                    print(f"[{req['type'].upper()}] {req['url']}")
                 
             print("--------------------------------------\n")
             
-            # --- Bagian logika pencarian yang sudah ada ---
             for log in logs:
                 message = json.loads(log['message'])
                 if 'params' in message and 'request' in message['params']:
