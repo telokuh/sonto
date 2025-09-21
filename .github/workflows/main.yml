@@ -53,7 +53,7 @@ jobs:
       - name: Install megatools
         run: |
           #sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --no-list-updates -y megatools
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
 
 
 
