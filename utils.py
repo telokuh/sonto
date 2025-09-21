@@ -306,7 +306,7 @@ def get_download_url_from_gofile(url):
         download_button.click()
 
         start_time = time.time()
-        timeout = 40
+        timeout = 300
         
         while time.time() - start_time < timeout:
             if not any(fname.endswith(('.crdownload', '.tmp')) for fname in os.listdir(download_dir)):
