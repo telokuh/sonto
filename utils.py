@@ -266,9 +266,8 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
-
 def get_download_url_from_gofile(url):
-    print("Mencari URL unduhan Gofile dari log konsol...")
+    print("Mencari URL unduhan Gofile dari log jaringan...")
     driver = None
     
     try:
@@ -278,7 +277,8 @@ def get_download_url_from_gofile(url):
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
-        options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
+        # Mengaktifkan log jaringan (performance)
+        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
@@ -290,17 +290,17 @@ def get_download_url_from_gofile(url):
         
         download_button.click()
         
-        download_url = None
+        download_info = None
         start_time = time.time()
-        timeout = 30
+        timeout = 20
         
         while time.time() - start_time < timeout:
-            print("\n--- Mencari di log konsol ---")
+            print("\n--- Mencari di log jaringan ---")
             time.sleep(2)
             
-            logs = driver.get_log('browser')
+            logs = driver.get_log('performance')
             
-            # --- Bagian yang ditambahkan: Cetak semua isi log ---
+            # --- Bagian yang ditambahkan: Cetak semua log mentah ---
             print(f"Ditemukan {len(logs)} log.")
             print("Isi log mentah:")
             print(logs)
@@ -308,27 +308,23 @@ def get_download_url_from_gofile(url):
             
             # --- Bagian logika pencarian yang sudah ada ---
             for log in logs:
-                try:
-                    message = json.loads(log['message'].split(' ', 1)[1])
+                message = json.loads(log['message'])
+                if 'params' in message and 'request' in message['params']:
+                    request_url = message['params']['request']['url']
                     
-                    if 'data' in message and 'children' in message['data']:
-                        children = message['data']['children']
-                        first_child_key = next(iter(children))
-                        download_url = children[first_child_key]['link']
-                        
-                        if download_url:
-                            print(f"URL unduhan ditemukan di log konsol: {download_url}")
-                            break
-                except (json.JSONDecodeError, KeyError):
-                    continue
+                    if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
+                        print(f"URL Unduhan Ditemukan di log: {request_url}")
+                        request_headers = message['params']['request']['headers']
+                        download_info = {'url': request_url, 'headers': request_headers}
+                        break
             
-            if download_url:
+            if download_info:
                 break
         
-        if download_url:
-            return download_url
+        if download_info:
+            return download_info
         else:
-            raise Exception("URL unduhan tidak ditemukan di log konsol dalam waktu yang ditentukan.")
+            raise Exception("URL unduhan tidak ditemukan di log jaringan dalam waktu yang ditentukan.")
 
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
