@@ -267,80 +267,65 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         return None
 
 
-def get_download_url_from_gofile(url):
-    print("Mencari URL unduhan GoFile dari log jaringan, fokus pada permintaan fetch/XHR...")
-    driver = None
+def download_file_with_selenium_gofile(url):
+    """
+    Mengunduh file GoFile secara langsung dengan mengonfigurasi preferensi browser
+    dan menunggu secara dinamis hingga unduhan selesai.
+    """
+    print("Memulai unduhan GoFile. Menunggu unduhan selesai secara dinamis...")
 
+    download_dir = os.path.join(os.getcwd(), "downloads")
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
+
+    chrome_prefs = {
+        "download.default_directory": download_dir,
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True,
+    }
+    
+    options = webdriver.ChromeOptions()
+    options.add_experimental_option("prefs", chrome_prefs)
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+
+    driver = None
+    downloaded_filename = None
+    
     try:
         service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
-        # Mengaktifkan log jaringan (performance)
-        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button > i"
+        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
         download_button.click()
-        
-        download_info = None
+
         start_time = time.time()
-        timeout = 20
+        timeout = 40
         
         while time.time() - start_time < timeout:
-            print("\n--- Mencari permintaan fetch/XHR di log jaringan ---")
-            time.sleep(2)
-            
-            logs = driver.get_log('performance')
-            
-            found_requests = []
-            for log in logs:
-                message = json.loads(log['message'])
-                if 'params' in message and 'request' in message['params']:
-                    request_url = message['params']['request']['url']
-                    resource_type = message['params']['request'].get('resourceType')
-                    
-                    if resource_type in ['xhr', 'fetch']:
-                        found_requests.append({'url': request_url, 'type': resource_type})
-
-            if found_requests:
-                print(f"Ditemukan {len(found_requests)} permintaan fetch/XHR.")
-                for req in found_requests:
-                    print(f"[{req['type'].upper()}] {req['url']}")
-                
-            print("--------------------------------------\n")
-            
-            for log in logs:
-                message = json.loads(log['message'])
-                if 'params' in message and 'request' in message['params']:
-                    request_url = message['params']['request']['url']
-                    
-                    if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
-                        print(f"URL Unduhan Ditemukan di log: {request_url}")
-                        request_headers = message['params']['request']['headers']
-                        download_info = {'url': request_url, 'headers': request_headers}
-                        break
-            
-            if download_info:
+            if not any(fname.endswith(('.crdownload', '.tmp')) for fname in os.listdir(download_dir)):
+                print("Unduhan selesai!")
                 break
-        
-        if download_info:
-            return download_info
+            time.sleep(1)
         else:
-            raise Exception("URL unduhan tidak ditemukan di log jaringan dalam waktu yang ditentukan.")
+            print("Unduhan gagal atau melebihi batas waktu.")
+            return None
 
+        list_of_files = [f for f in os.listdir(download_dir) if not f.endswith(('.crdownload', '.tmp'))]
+        if list_of_files:
+            latest_file = max([os.path.join(download_dir, f) for f in list_of_files], key=os.path.getctime)
+            downloaded_filename = os.path.basename(latest_file)
+            print(f"File berhasil diunduh: {downloaded_filename}")
+        
     except Exception as e:
-        print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
-        if driver:
-            driver.quit()
-        return None
+        print(f"Gagal mengunduh file dengan Selenium: {e}")
     finally:
         if driver:
             driver.quit()
+        return downloaded_filename
