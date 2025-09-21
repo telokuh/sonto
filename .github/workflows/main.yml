@@ -24,7 +24,8 @@ jobs:
       - name: Setup and Install Python Dependencies
         run: |
           python -m venv .venv
-          source .venv/bin/activate
+          #source .venv/bin/activate
+          echo ".venv/bin" >> $GITHUB_PATH
           # Skip pip install if venv cache is found
           if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
           pip install -r requirements.txt
