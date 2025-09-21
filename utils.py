@@ -365,12 +365,33 @@ def human_readable_to_bytes(size_str):
     return int(size_value * unit_multipliers.get(size_unit, 1))
 
 
-def download_file_with_aria2c(url, message_id=None):
+def download_file_with_aria2c(url, filename=None, message_id=None):
     """
-    Mengunduh file menggunakan aria2c secara langsung dan melaporkan progresnya.
-    Fungsi ini menggantikan skrip bash eksternal.
+    Mengunduh file menggunakan aria2c dan mengembalikan nama file yang diunduh.
     """
-    print(f"Mengunduh dengan aria2c: {url}")
+    print(f"Mulai unduhan dengan aria2c: {url}")
+    
+    # Mendapatkan nama file jika belum disediakan
+    if not filename:
+        try:
+            # Menggunakan requests untuk mendapatkan nama file dari header Content-Disposition
+            with requests.get(url, stream=True, allow_redirects=True, timeout=10) as r:
+                r.raise_for_status()
+                if 'content-disposition' in r.headers:
+                    match = re.search(r'filename="?([^";]+)"?', r.headers['content-disposition'])
+                    if match:
+                        filename = match.group(1)
+                if not filename:
+                    # Fallback: gunakan nama dari URL jika header tidak ada
+                    filename = url.split('/')[-1].split('?')[0]
+                    if not filename:
+                        filename = "unduhan_tanpa_nama"
+        except Exception as e:
+            print(f"Gagal mendapatkan nama file dari URL: {e}")
+            send_telegram_message(f"❌ Gagal mendapatkan nama file. Mengunduh tanpa nama.\n\nURL: {url}")
+            filename = "unduhan_tanpa_nama"
+
+    print(f"Nama file yang akan diunduh: {filename}")
     
     # Perintah aria2c yang ditingkatkan
     command = [
@@ -380,10 +401,10 @@ def download_file_with_aria2c(url, message_id=None):
         '--console-log-level=warn',
         '--summary-interval=0',
         '-x', '16', '-s', '16', '-c',
+        '-o', filename, # Menyimpan file dengan nama yang ditentukan
         url
     ]
     
-    # Jalankan aria2c dan tangkap outputnya
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         last_percent_notified = -1
@@ -393,7 +414,6 @@ def download_file_with_aria2c(url, message_id=None):
             if not line:
                 break
             
-            # Regex untuk menangkap persentase dan ukuran
             progress_match = re.search(r'\[.+?\]\s+(\d+\.\d+)%\s+DL:\s+([\d\.]+[KMGTP]B)\s+', line)
             
             if progress_match:
@@ -401,7 +421,7 @@ def download_file_with_aria2c(url, message_id=None):
                 downloaded_size = progress_match.group(2)
                 
                 if percent >= last_percent_notified + 10 or percent == 100:
-                    message = f"⬇️ **Mengunduh...**\nURL: `{url}`\n\nUkuran: `{downloaded_size}`\nProgres: `{percent}%`"
+                    message = f"⬇️ **Mengunduh...**\n`{filename}`\nUkuran: `{downloaded_size}`\nProgres: `{percent}%`"
                     edit_telegram_message(message_id, message)
                     last_percent_notified = percent
         
@@ -410,12 +430,13 @@ def download_file_with_aria2c(url, message_id=None):
         if process.returncode != 0:
             raise subprocess.CalledProcessError(process.returncode, command, output=process.stdout.read())
 
-        return True
+        return filename # Unduhan berhasil, kembalikan nama file
+    
     except subprocess.CalledProcessError as e:
         print(f"aria2c gagal: {e}")
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
-        return False
+        return None
     except Exception as e:
         print(f"Terjadi kesalahan: {e}")
         send_telegram_message(f"❌ **Terjadi kesalahan tak terduga.**\n\nDetail: {str(e)[:150]}...")
-        return False
+        return None
