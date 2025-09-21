@@ -48,6 +48,13 @@ jobs:
         run: |
               sudo apt-get update
               sudo apt-get install -y megatools
+
+      - name: Clean up apt cache
+        run: |
+          sudo rm -f /var/cache/apt/archives/lock
+          sudo rm -f /var/lib/apt/lists/lock
+          sudo rm -rf /var/cache/apt/archives/partial
+          sudo rm -rf /var/lib/apt/lists/partial
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
