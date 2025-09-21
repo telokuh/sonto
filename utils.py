@@ -266,6 +266,7 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
+
 def get_download_url_from_gofile(url):
     print("Mencari URL unduhan Gofile dari log konsol...")
     driver = None
@@ -277,7 +278,6 @@ def get_download_url_from_gofile(url):
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
-        # Mengaktifkan log konsol
         options.set_capability('goog:loggingPrefs', {'browser': 'ALL'})
 
         driver = webdriver.Chrome(service=service, options=options)
@@ -290,26 +290,29 @@ def get_download_url_from_gofile(url):
         
         download_button.click()
         
-        # --- Solusi Baru: Cari di log konsol ---
         download_url = None
         start_time = time.time()
-        timeout = 6 # Atur batas waktu
+        timeout = 60
         
         while time.time() - start_time < timeout:
-            print("Mencari JSON unduhan di log konsol...")
+            print("\n--- Mencari di log konsol ---")
             time.sleep(2)
             
             logs = driver.get_log('browser')
             
+            # --- Bagian yang ditambahkan: Cetak semua isi log ---
+            print(f"Ditemukan {len(logs)} log.")
+            print("Isi log mentah:")
+            print(logs)
+            print("--------------------------------------\n")
+            
+            # --- Bagian logika pencarian yang sudah ada ---
             for log in logs:
                 try:
-                    # Coba parsing setiap pesan log sebagai JSON
                     message = json.loads(log['message'].split(' ', 1)[1])
                     
-                    # Cek apakah ini adalah JSON yang kita cari
                     if 'data' in message and 'children' in message['data']:
                         children = message['data']['children']
-                        # Ambil URL dari objek pertama di children
                         first_child_key = next(iter(children))
                         download_url = children[first_child_key]['link']
                         
@@ -317,7 +320,7 @@ def get_download_url_from_gofile(url):
                             print(f"URL unduhan ditemukan di log konsol: {download_url}")
                             break
                 except (json.JSONDecodeError, KeyError):
-                    continue # Abaikan log yang bukan JSON atau tidak memiliki format yang tepat
+                    continue
             
             if download_url:
                 break
@@ -329,7 +332,6 @@ def get_download_url_from_gofile(url):
 
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
-        # send_telegram_message(f"❌ Gagal mendapatkan URL unduhan Gofile.\n\nDetail: {str(e)[:150]}...")
         if driver:
             driver.quit()
         return None
