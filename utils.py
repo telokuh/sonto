@@ -218,7 +218,7 @@ def get_download_url_from_gofile(url):
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
-        
+        print(download_button.get_attribute("outerHTML"))
         download_button.click()
         time.sleep(3)
         logs = driver.get_log('performance')
