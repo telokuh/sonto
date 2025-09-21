@@ -14,25 +14,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Python dependencies
-        id: cache-pip
-        uses: actions/cache@v4
+      - name: Cache venv
+        id: cache-venv
+        uses: actions/cache@v3
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          path: .venv
+          key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Python dependencies
+      - name: Setup and Install Python Dependencies
         run: |
-           pip install -r requirements.txt
-           #sudo apt-get install aria2 -y
-
+          python -m venv .venv
+          source .venv/bin/activate
+          # Skip pip install if venv cache is found
+          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
+          pip install -r requirements.txt
+          fi
       - name: Grant permissions to APT cache
         run: |
           sudo chown -R $USER:$USER /var/cache/apt
