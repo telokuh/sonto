@@ -309,10 +309,11 @@ def get_download_url_from_gofile(url):
         timeout = 300
         
         while time.time() - start_time < timeout:
-            if not any(fname.endswith(('.crdownload', '.tmp')) for fname in os.listdir(download_dir)):
+            if not any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(download_dir)):
+               
                 print("Unduhan selesai!")
                 break
-            time.sleep(1)
+            time.sleep(2)
         else:
             print("Unduhan gagal atau melebihi batas waktu.")
             return None
