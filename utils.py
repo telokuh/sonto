@@ -267,7 +267,7 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         return None
 
 
-def download_file_with_selenium_gofile(url):
+def get_download_url_from_gofile(url):
     """
     Mengunduh file GoFile secara langsung dengan mengonfigurasi preferensi browser
     dan menunggu secara dinamis hingga unduhan selesai.
