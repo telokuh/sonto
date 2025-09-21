@@ -160,7 +160,7 @@ def edit_telegram_message(message_id, message_text):
     except Exception as e:
         print(f"Gagal mengedit pesan Telegram: {e}")
 
-def download_with_yt_dlp_and_report_progress(url, message_id=None):
+def get_download_url_with_yt_dlp(url, message_id=None):
     print("Mencoba mengunduh file dengan yt-dlp...")
     send_telegram_message("⏳ **Memulai unduhan dengan `yt-dlp`...**")
 
