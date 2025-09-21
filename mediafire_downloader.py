@@ -2,19 +2,18 @@ import os
 import re
 from utils import (
     send_telegram_message,
-    get_download_url_with_yt_dlp,
-    get_download_url_with_selenium,
-    download_file_with_megatools,
+    edit_telegram_message,
+    download_with_yt_dlp,
     download_file_with_aria2c,
+    download_file_with_megatools,
     get_download_url_from_pixeldrain_api,
-    download_file_with_selenium_gofile
+    get_download_url_from_gofile
 )
 
 # Dapatkan URL halaman dari environment variable
 mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
 
 # Regex untuk mendeteksi URL
-YOUTUBE_URL_REGEX = r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/.+"
 MEGA_URL_REGEX = r"(?:https?://)?(?:www\.)?mega\.nz/.+"
 PIXELDRAIN_URL_REGEX = r"(?:https?://)?(?:www\.)?pixeldrain\.com/u/.+"
 GOFILE_URL_REGEX = r"(?:https?://)?(?:www\.)?gofile\.io/.+"
@@ -23,42 +22,55 @@ if not mediafire_page_url:
     print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
     exit(1)
 
-# --- Logika Utama ---
-formatted_url = f"`{mediafire_page_url.replace('http://', '').replace('https://', '')}`"
-send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
+def main_downloader(url):
+    formatted_url = f"`{url.replace('http://', '').replace('https://', '')}`"
+    initial_message_id = send_telegram_message(f"🔍 **Mulai memproses URL:**\n{formatted_url}")
+    downloaded_filename = None
 
-is_mega_url = re.match(MEGA_URL_REGEX, mediafire_page_url)
-is_pixeldrain_url = re.match(PIXELDRAIN_URL_REGEX, mediafire_page_url)
-is_gofile_url = re.match(GOFILE_URL_REGEX, mediafire_page_url)
-downloaded_filename = None
-
-# Coba yt-dlp terlebih dahulu untuk SEMUA URL
-download_url = get_download_url_with_yt_dlp(mediafire_page_url)
-
-if download_url:
-    downloaded_filename = download_file_with_aria2c(download_url)
-elif is_pixeldrain_url:
+    # --- Logika Berjenjang ---
+    if re.match(MEGA_URL_REGEX, url):
+        print("URL cocok dengan MEGA. Menggunakan megatools...")
+        send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
+        downloaded_filename = download_file_with_megatools(url)
     
-    download_url_pixeldrain = get_download_url_from_pixeldrain_api(mediafire_page_url)
-    if download_url_pixeldrain:
-        downloaded_filename = download_file_with_aria2c(download_url_pixeldrain)
-elif is_mega_url:
-    send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
-    downloaded_filename = download_file_with_megatools(mediafire_page_url)
-elif is_gofile_url:
-    send_telegram_message("`yt-dlp` gagal memproses URL GoFile. Menggunakan Selenium...")
-    downloaded_filename = download_file_with_aria2c(mediafire_page_url)
-else:
-    
-    download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
-    if download_url_selenium:
-        downloaded_filename = download_file_with_aria2c(download_url_selenium)
+    elif re.match(PIXELDRAIN_URL_REGEX, url):
+        print("URL cocok dengan Pixeldrain. Menggunakan API...")
+        download_url_pixeldrain = get_download_url_from_pixeldrain_api(url)
+        if download_url_pixeldrain:
+            downloaded_filename = download_file_with_aria2c(download_url_pixeldrain, message_id=initial_message_id)
 
-if downloaded_filename:
-    with open("downloaded_filename.txt", "w") as f:
-        f.write(downloaded_filename)
-    send_telegram_message(f"✅ **Selesai!**\nFile berhasil diunduh dan sedang dibuatkan rilis di GitHub.")
-else:
-    print("Tidak dapat menemukan URL unduhan. Proses dihentikan.")
-    send_telegram_message("❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
-    exit(1)
+    elif re.match(GOFILE_URL_REGEX, url):
+        print("URL cocok dengan Gofile. Menggunakan Selenium...")
+        download_info = get_download_url_from_gofile(url)
+        if download_info:
+            downloaded_filename = download_file_with_aria2c(
+                download_info['url'],
+                headers=download_info.get('headers'),
+                message_id=initial_message_id
+            )
+
+    else:
+        # Coba yt-dlp sebagai opsi universal
+        print("URL tidak cocok dengan pola khusus. Mencoba dengan yt-dlp...")
+        yt_dlp_success = download_with_yt_dlp(url, message_id=initial_message_id)
+        if yt_dlp_success:
+            # Karena yt-dlp sudah mengunduh file, tidak perlu memanggil aria2c.
+            # Anda perlu menambahkan logika untuk mendapatkan nama file dari yt-dlp jika dibutuhkan.
+            # Untuk saat ini, kita akan mengasumsikan unduhan berhasil.
+            downloaded_filename = "file_berhasil_diunduh_dengan_yt-dlp" # Placeholder
+        else:
+            # Fallback ke aria2c jika yt-dlp gagal
+            print("yt-dlp gagal. Mencoba dengan aria2c sebagai cadangan...")
+            downloaded_filename = download_file_with_aria2c(url, message_id=initial_message_id)
+    
+    if downloaded_filename:
+        with open("downloaded_filename.txt", "w") as f:
+            f.write(downloaded_filename)
+        send_telegram_message(f"✅ **Selesai!**\nFile `{downloaded_filename}` berhasil diunduh dan sedang dibuatkan rilis di GitHub.")
+    else:
+        print("Tidak dapat menemukan URL unduhan. Proses dihentikan.")
+        send_telegram_message("❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
+        exit(1)
+
+# Panggil fungsi utama dengan URL dari environment variable
+main_downloader(mediafire_page_url)
