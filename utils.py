@@ -275,14 +275,14 @@ def get_download_url_from_gofile(url):
     try:
         service = Service(ChromeDriverManager().install())
         options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
+        #options.add_argument('--headless')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         
         options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
-
+        time.sleep(2)
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
@@ -292,7 +292,7 @@ def get_download_url_from_gofile(url):
         
         download_info = None
         start_time = time.time()
-        timeout = 60
+        timeout = 6
         
         while time.time() - start_time < timeout:
             print("Mencari URL di log jaringan...")
