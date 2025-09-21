@@ -266,8 +266,9 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
+
 def get_download_url_from_gofile(url):
-    print("Mencoba mendapatkan URL unduhan dari Gofile menggunakan log jaringan Selenium...")
+    print("Mencari URL unduhan Gofile dengan pendekatan paling andal...")
     # send_telegram_message("🔄 Menggunakan Selenium untuk menemukan URL unduhan Gofile.")
     driver = None
     
@@ -289,13 +290,26 @@ def get_download_url_from_gofile(url):
         
         download_button.click()
         
-        # --- Logika Retry: Cari URL unduhan hingga 5 kali ---
         download_info = None
-        for attempt in range(5):
-            print(f"Percobaan ke-{attempt + 1}: Mencari URL di log jaringan...")
-            time.sleep(1) # Tunggu 1 detik agar log terisi
+        start_time = time.time()
+        timeout = 60
+        
+        while time.time() - start_time < timeout:
+            print("Mencari URL di log jaringan...")
+            time.sleep(2)
+            
             logs = driver.get_log('performance')
             
+            # --- Bagian yang Ditambahkan: Mencetak SEMUA URL ---
+            print("\n--- Semua URL dari Log Jaringan ---")
+            for log in logs:
+                message = json.loads(log['message'])
+                if 'params' in message and 'request' in message['params']:
+                    request_url = message['params']['request']['url']
+                    print(request_url)
+            print("-----------------------------------\n")
+
+            # --- Bagian Logika Pencarian yang Sudah Ada ---
             for log in logs:
                 message = json.loads(log['message'])
                 if 'params' in message and 'request' in message['params']:
@@ -308,12 +322,12 @@ def get_download_url_from_gofile(url):
                         break
             
             if download_info:
-                break # Keluar dari loop jika URL sudah ditemukan
-
+                break
+        
         if download_info:
             return download_info
         else:
-            raise Exception("URL unduhan tidak ditemukan di log jaringan.")
+            raise Exception("URL unduhan tidak ditemukan di log jaringan dalam waktu yang ditentukan.")
 
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
