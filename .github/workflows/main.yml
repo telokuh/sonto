@@ -61,15 +61,6 @@ jobs:
           path: .venv
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
 
-      - name: Setup and Install Python Dependencies
-        run: |
-          python -m venv .venv
-          #source .venv/bin/activate
-          echo ".venv/bin" >> $GITHUB_PATH
-          # Skip pip install if venv cache is found
-          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
-          pip install -r requirements.txt
-          fi
 
       - name: Run Downloader Script
         env:
@@ -79,10 +70,16 @@ jobs:
           OWNER_ID: ${{ vars.OWNER_ID }}
           MEDIAFIRE_PAGE_URL: ${{ github.event.client_payload.url }}
           RCLONE_CONFIG: rclone.conf
-        
+
         run: |
-           pip install requests
-           python3 mediafire_downloader.py
+          python -m venv .venv
+          source .venv/bin/activate
+          #echo ".venv/bin" >> $GITHUB_PATH
+          # Skip pip install if venv cache is found
+          if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
+          pip install -r requirements.txt
+          fi
+          python mediafire_downloader.py
         
 
       - name: Get Downloaded Filename
