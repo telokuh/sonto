@@ -198,57 +198,6 @@ def download_with_yt_dlp(url, message_id=None):
         send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {str(e)[:150]}...")
         return False
 
-def get_download_url_from_gofile(url):
-    print("Mencoba mendapatkan URL unduhan dari Gofile menggunakan log jaringan Selenium...")
-    send_telegram_message("🔄 Menggunakan Selenium untuk menemukan URL unduhan Gofile.")
-    driver = None
-    
-    try:
-        service = Service(ChromeDriverManager().install())
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
-        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
-
-        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
-        download_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-        )
-        print(download_button.get_attribute("outerHTML"))
-        download_button.click()
-        time.sleep(3)
-        logs = driver.get_log('performance')
-        
-        download_info = None
-        for log in logs:
-            message = json.loads(log['message'])
-            if 'params' in message and 'request' in message['params']:
-                request_url = message['params']['request']['url']
-                if 'download' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.exe']):
-                    request_headers = message['params']['request']['headers']
-                    download_info = {'url': request_url, 'headers': request_headers}
-                    print(f"URL unduhan ditemukan di log jaringan: {download_info['url']}")
-                    break
-        
-        if download_info:
-            return download_info
-        else:
-            raise Exception("URL unduhan tidak ditemukan di log jaringan.")
-
-    except Exception as e:
-        print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
-        send_telegram_message(f"❌ Gagal mendapatkan URL unduhan Gofile.\n\nDetail: {str(e)[:150]}...")
-        if driver:
-            driver.quit()
-        return None
-    finally:
-        if driver:
-            driver.quit()
-
 def download_file_with_aria2c(url, headers=None, filename=None, message_id=None):
     """
     Mengunduh file menggunakan aria2c dan mengembalikan nama file yang diunduh,
@@ -316,3 +265,60 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         print(f"aria2c gagal: {e}")
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
+
+
+def get_download_url_from_gofile(url):
+    print("Mencoba mendapatkan URL unduhan dari Gofile menggunakan log jaringan Selenium...")
+    # send_telegram_message("🔄 Menggunakan Selenium untuk menemukan URL unduhan Gofile.")
+    driver = None
+    
+    try:
+        service = Service(ChromeDriverManager().install())
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.get(url)
+
+        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        download_button = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+        )
+        
+        download_button.click()
+        time.sleep(2)
+        logs = driver.get_log('performance')
+        
+        download_info = None
+        for log in logs:
+            message = json.loads(log['message'])
+            if 'params' in message and 'request' in message['params']:
+                request_url = message['params']['request']['url']
+                
+                # --- Logika yang Diperbarui: Tambahkan pola URL `/download/web/` ---
+                if '/download/web/' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.pdf', '.exe']):
+                    
+                    print(f"URL Unduhan Ditemukan di log: {request_url}") # Mencetak URL
+                    
+                    request_headers = message['params']['request']['headers']
+                    download_info = {'url': request_url, 'headers': request_headers}
+                    break
+        
+        if download_info:
+            return download_info
+        else:
+            raise Exception("URL unduhan tidak ditemukan di log jaringan.")
+
+    except Exception as e:
+        print(f"Gagal mendapatkan URL unduhan dari Gofile: {e}")
+        # send_telegram_message(f"❌ Gagal mendapatkan URL unduhan Gofile.\n\nDetail: {str(e)[:150]}...")
+        if driver:
+            driver.quit()
+        return None
+    finally:
+        if driver:
+            driver.quit()
+
