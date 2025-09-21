@@ -266,6 +266,7 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
         return None
 
+
 def get_download_url_from_gofile(url):
     print("Mencari URL unduhan Gofile dari log jaringan...")
     driver = None
@@ -283,7 +284,8 @@ def get_download_url_from_gofile(url):
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
 
-        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div.flex.items-center.overflow-auto > div.truncate > a"
+        # --- Selector klik yang baru
+        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button > i"
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
@@ -300,10 +302,21 @@ def get_download_url_from_gofile(url):
             
             logs = driver.get_log('performance')
             
-            # --- Bagian yang ditambahkan: Cetak semua log mentah ---
-            print(f"Ditemukan {len(logs)} log.")
-            print("Isi log mentah:")
-            print(logs)
+            # --- Bagian yang ditambahkan: Cetak URL yang diawali 'http' saja
+            
+            print("Isi log yang difilter:")
+            
+            filtered_logs = []
+            for log in logs:
+                message = json.loads(log['message'])
+                if 'params' in message and 'request' in message['params']:
+                    request_url = message['params']['request']['url']
+                    if request_url.startswith('http'):
+                        filtered_logs.append(request_url)
+            
+            for f_log in filtered_logs:
+                print(f_log)
+                
             print("--------------------------------------\n")
             
             # --- Bagian logika pencarian yang sudah ada ---
