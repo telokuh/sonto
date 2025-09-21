@@ -20,6 +20,21 @@ from selenium.common.exceptions import TimeoutException
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
+def get_download_url_from_pixeldrain_api(url):
+    """
+    Mengambil URL unduhan langsung dari API Pixeldrain.
+    """
+    print("Memproses URL Pixeldrain menggunakan API...")
+    try:
+        file_id = url.split('/')[-1]
+        download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+        print(f"URL Unduhan Pixeldrain ditemukan: {download_url}")
+        return download_url
+    except Exception as e:
+        print(f"Gagal mendapatkan URL unduhan Pixeldrain: {e}")
+        return None
+
+
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
