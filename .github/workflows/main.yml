@@ -34,20 +34,20 @@ jobs:
            #sudo apt-get install aria2 -y
 
            
-      - name: Cache megatools
-        id: cache-megatools
-        uses: actions/cache@v4
+      - name: Cache APT packages
+        uses: actions/cache@v3
         with:
-          path: megatools_cache
-          key: ${{ runner.os }}-megatools-v1
-          restore-keys: |
-            ${{ runner.os }}-megatools-
+           path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+           key: ${{ runner.os }}-apt-megatools
+           restore-keys: |
+             ${{ runner.os }}-apt-
 
       - name: Install megatools
         run: |
-          
-          sudo dpkg -i ./megatools_cache/megatools_*.deb
-          #sudo apt-get install -f # Memperbaiki dependensi yang mungkin terputus
+              sudo apt-get update
+              sudo apt-get install -y megatools
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
@@ -86,5 +86,5 @@ jobs:
           Rilis 
           File: ${{ steps.get_filename.outputs.file_name }}
          files: ${{ steps.get_filename.outputs.file_name }}
-        env:
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        #env:
+         #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
