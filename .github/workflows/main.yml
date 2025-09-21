@@ -48,13 +48,19 @@ jobs:
           key: ${{ runner.os }}-apt-megatools
           restore-keys: |
            ${{ runner.os }}-apt-
+           
+      - name: Disable man-db and other triggers
+        run: |
+           echo 'exit 101' | sudo tee /usr/sbin/policy-rc.d
+           sudo chmod +x /usr/sbin/policy-rc.d
+
 
 
       - name: Install megatools
         run: |
           #sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
-
+          sudo rm /usr/sbin/policy-rc.d
 
 
       - name: Create YouTube cookies file from secret
