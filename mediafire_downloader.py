@@ -41,13 +41,8 @@ def main_downloader(url):
 
     elif re.match(GOFILE_URL_REGEX, url):
         print("URL cocok dengan Gofile. Menggunakan Selenium...")
-        download_info = get_download_url_from_gofile(url)
-        if download_info:
-            downloaded_filename = download_file_with_aria2c(
-                download_info['url'],
-                headers=download_info.get('headers'),
-                message_id=initial_message_id
-            )
+        downloaded_filename = get_download_url_from_gofile(url)
+        
 
     else:
         # Coba yt-dlp sebagai opsi universal
