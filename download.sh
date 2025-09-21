@@ -14,7 +14,7 @@ last_percentage=-1
 
 # Fungsi untuk memperbarui pesan Telegram
 update_telegram() {
-    local percentage=$1
+    local percentage="$1"
     curl -s "https://api.telegram.org/bot${TG_TOKEN}/editMessageText" \
         --data "message_id=${msg_id}&text=⬇️ **Mengunduh...**\nProgres: \`$percentage\`&chat_id=${ch_id}&parse_mode=Markdown" > /dev/null
 }
@@ -22,12 +22,12 @@ update_telegram() {
 echo "Mulai unduhan dengan aria2c..."
 echo "URL: $url"
 
-# Jalankan aria2c dan proses outputnya
-aria2c "$url" -x 16 -s 16 -c 2>&1 | while IFS= read -r -n 1 char; do
-    buffer+="$char"
+# Jalankan aria2c dengan buffering baris
+# aria2c akan mengeluarkan output per baris, bukan per blok
+stdbuf -oL aria2c "$url" -x 16 -s 16 -c 2>&1 | while IFS= read -r line; do
     
-    # Cari persentase dalam buffer
-    if [[ "$buffer" =~ ([0-9]+\.[0-9]+%) ]]; then
+    # Cari persentase dalam baris output
+    if [[ "$line" =~ ([0-9]+\.[0-9]+%) ]]; then
         current_percentage="${BASH_REMATCH[1]}"
         
         # Ekstrak bagian integer dari persentase
@@ -38,13 +38,14 @@ aria2c "$url" -x 16 -s 16 -c 2>&1 | while IFS= read -r -n 1 char; do
             update_telegram "$current_percentage"
             last_percentage="$current_integer"
         fi
-
-        # Bersihkan buffer
-        buffer=""
     fi
 done
 
-# Kirim pesan terakhir 100% untuk memastikan unduhan selesai
-update_telegram "100.0%"
-
-echo "Unduhan selesai."
+# Periksa kode keluar aria2c
+if [ $? -eq 0 ]; then
+    echo "Unduhan selesai."
+    update_telegram "100.0%"
+else
+    echo "Unduhan gagal."
+    update_telegram "Gagal mengunduh."
+fi
