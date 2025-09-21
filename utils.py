@@ -275,7 +275,7 @@ def get_download_url_from_gofile(url):
     print("Memulai unduhan GoFile. Menunggu unduhan selesai secara dinamis...")
 
     # Kirim pesan awal ke Telegram
-    initial_message_id = send_telegram_message("⏳")
+    initial_message_id = send_telegram_message("⬇️ 9%")
 
     download_dir = os.path.join(os.getcwd(), "downloads")
     if not os.path.exists(download_dir):
@@ -322,9 +322,10 @@ def get_download_url_from_gofile(url):
             
             # Perbarui pesan Telegram setiap 30 detik untuk menunjukkan unduhan sedang berjalan
             if is_downloading and time.time() - last_check_time > 3:
-                edit_telegram_message(initial_message_id, f"⬇️ {last_check_time}%")
+                counter = 10
+                edit_telegram_message(initial_message_id, f"⬇️ {counter}0%")
                 last_check_time = time.time()
-            
+                counter += 10
             if not is_downloading:
                 print("Unduhan selesai!")
                 break
