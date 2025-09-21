@@ -33,28 +33,28 @@ jobs:
            pip install -r requirements.txt
            #sudo apt-get install aria2 -y
 
-           
       - name: Cache APT packages
         uses: actions/cache@v3
         with:
-           path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-           key: ${{ runner.os }}-apt-megatools
-           restore-keys: |
-             ${{ runner.os }}-apt-
+          path: |
+           /var/cache/apt/archives
+           /var/lib/apt/lists
+          key: ${{ runner.os }}-apt-megatools
+          restore-keys: |
+           ${{ runner.os }}-apt-
+
+      - name: Grant permissions to APT cache
+        run: |
+          sudo chown -R $USER:$USER /var/cache/apt
+          sudo chown -R $USER:$USER /var/lib/apt
 
       - name: Install megatools
         run: |
-              sudo apt-get update
-              sudo apt-get install -y megatools
+          sudo apt-get update
+          sudo apt-get install -y megatools
 
-      - name: Clean up apt cache
-        run: |
-          sudo rm -f /var/cache/apt/archives/lock
-          sudo rm -f /var/lib/apt/lists/lock
-          sudo rm -rf /var/cache/apt/archives/partial
-          sudo rm -rf /var/lib/apt/lists/partial
+
+
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
@@ -95,3 +95,12 @@ jobs:
          files: ${{ steps.get_filename.outputs.file_name }}
         #env:
          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+      - name: Clean up apt cache
+        run: |
+          sudo rm -f /var/cache/apt/archives/lock
+          sudo rm -f /var/lib/apt/lists/lock
+          sudo rm -rf /var/cache/apt/archives/partial
+          sudo rm -rf /var/lib/apt/lists/partial
