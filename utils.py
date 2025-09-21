@@ -220,7 +220,7 @@ def get_download_url_from_gofile(url):
         )
         
         download_button.click()
-        time.sleep(2)
+        time.sleep(3)
         logs = driver.get_log('performance')
         
         download_info = None
@@ -228,7 +228,7 @@ def get_download_url_from_gofile(url):
             message = json.loads(log['message'])
             if 'params' in message and 'request' in message['params']:
                 request_url = message['params']['request']['url']
-                if '?download=1' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.pdf', '.exe']):
+                if 'download' in request_url or any(ext in request_url for ext in ['.zip', '.mp4', '.apk', '.exe']):
                     request_headers = message['params']['request']['headers']
                     download_info = {'url': request_url, 'headers': request_headers}
                     print(f"URL unduhan ditemukan di log jaringan: {download_info['url']}")
