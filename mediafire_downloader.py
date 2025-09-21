@@ -47,7 +47,7 @@ elif is_mega_url:
     downloaded_filename = download_file_with_megatools(mediafire_page_url)
 elif is_gofile_url:
     send_telegram_message("`yt-dlp` gagal memproses URL GoFile. Menggunakan Selenium...")
-    downloaded_filename = download_file_with_selenium_gofile(mediafire_page_url)
+    downloaded_filename = download_file_with_aria2c(mediafire_page_url)
 else:
     
     download_url_selenium = get_download_url_with_selenium(mediafire_page_url)
