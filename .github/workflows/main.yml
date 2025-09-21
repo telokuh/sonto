@@ -79,7 +79,11 @@ jobs:
           OWNER_ID: ${{ vars.OWNER_ID }}
           MEDIAFIRE_PAGE_URL: ${{ github.event.client_payload.url }}
           RCLONE_CONFIG: rclone.conf
-        #run: python3 mediafire_downloader.py
+        
+        run: |
+           pip install requests
+           python3 mediafire_downloader.py
+        
 
       - name: Get Downloaded Filename
         id: get_filename
