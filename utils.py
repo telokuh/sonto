@@ -160,35 +160,56 @@ def edit_telegram_message(message_id, message_text):
     except Exception as e:
         print(f"Gagal mengedit pesan Telegram: {e}")
 
-def get_download_url_with_yt_dlp(url):
-    print("Mencoba mendapatkan URL unduhan dengan yt-dlp...")
-    send_telegram_message("⏳ **Mencari URL unduhan...**\n`yt-dlp` sedang mencoba memproses link.")
-    
-    command = ['yt-dlp', '--get-url', '--no-warnings', '--rm-cache-dir', url]
-    
-    cookies_file = "cookies.txt"
-    if os.path.exists(cookies_file):
-        command.extend(['--cookies', cookies_file])
-    
-    try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        download_url = result.stdout.strip()
-        if download_url:
-            print("yt-dlp berhasil menemukan URL unduhan.")
-            return download_url
-    except subprocess.CalledProcessError as e:
-        print(f"yt-dlp gagal: {e.stderr.strip()}")
-        #send_telegram_message(f"❌ `yt-dlp` gagal memproses URL.\n\nDetail: {e.stderr.strip()[:200]}...")
-    except FileNotFoundError:
-        print("yt-dlp tidak ditemukan.")
-    
-    return None
+def download_with_yt_dlp_and_report_progress(url, message_id=None):
+    print("Mencoba mengunduh file dengan yt-dlp...")
+    send_telegram_message("⏳ **Memulai unduhan dengan `yt-dlp`...**")
 
+    # Command untuk mengunduh dan menampilkan progress ke stdout
+    command = [
+        'yt-dlp',
+        '--newline', # Pastikan setiap baris output adalah baris baru
+        '--progress',
+        '--progress-template', '%(progress._percent_str)s',
+        '--no-warnings',
+        '--rm-cache-dir',
+        '--output', '%(title)s.%(ext)s',
+        url
+    ]
+
+    try:
+        # Panggil yt-dlp dan tangkap outputnya
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
+        last_percent = -1
+        file_title = None
+
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            
+            # Cek apakah baris output adalah persentase
+            if '%' in line:
+                try:
+                    current_percent = int(float(line.strip().replace('%', '')))
+                    if current_percent > last_percent + 5 or current_percent == 100:
+                        message = f"⬇️ **Mengunduh...**\n`{url}`\n\nProgres: `{current_percent}%`"
+                        edit_telegram_message(message_id, message)
+                        last_percent = current_percent
+                except ValueError:
+                    continue
+
+        process.wait()
+        
+        if process.returncode != 0:
+            raise Exception("yt-dlp gagal mengunduh file.")
+            
+        print("Unduhan yt-dlp selesai.")
+        return True # Unduhan berhasil
+
+    except Exception as e:
+        print(f"yt-dlp gagal: {e}")
+        send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {str(e)[:150]}...")
+        return False # Unduhan gagal
 def get_download_url_with_selenium(url):
     print("yt-dlp gagal. Menggunakan Selenium sebagai cadangan...")
     send_telegram_message("🔄 `yt-dlp` gagal. Menggunakan Selenium untuk menemukan URL.")
