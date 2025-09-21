@@ -292,7 +292,7 @@ def get_download_url_from_gofile(url):
         
         download_url = None
         start_time = time.time()
-        timeout = 60
+        timeout = 30
         
         while time.time() - start_time < timeout:
             print("\n--- Mencari di log konsol ---")
