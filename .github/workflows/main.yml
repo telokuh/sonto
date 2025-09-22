@@ -75,7 +75,7 @@ jobs:
           fi
           
       - name: Run Downloader Script
-        run: python mediafire_downloader.py
+        run: python main.py
         env:
           API_ID: ${{ vars.API_ID }}
           API_HASH: ${{ vars.API_HASH }}
