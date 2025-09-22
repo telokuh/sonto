@@ -313,12 +313,14 @@ def downloader(url):
         elif "sourceforge" in url:
             download_button_selector = "#remaining-buttons > div.large-12 > a.button.green"
 
-        print(download_button_selector.get_attribute('outerHTML'))
-        send_telegram_message(download_button_selector.get_attribute('outerHTML'))
         
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
+
+        print(download_button.get_attribute('outerHTML'))
+        send_telegram_message(download_button.get_attribute('outerHTML'))
+        
         download_button.click()
 
         
