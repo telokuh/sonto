@@ -295,7 +295,8 @@ def downloader(url):
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-
+    options.add_experimental_option("mobileEmulation", {"deviceName": "Nexus 5"})
+    
     driver = None
     downloaded_filename = None
     
@@ -304,19 +305,21 @@ def downloader(url):
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
         
-        if "sourceforge" in url:
-            time.sleep(5)
         
 
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
         if "mediafire" in url:
             download_button_selector = "#downloadButton"
+        elif "sourceforge" in url:
+            download_button_selector = "#remaining-buttons > div.large-12 > a.button.green"
 
-        if "sourceforge" not in url:
-            download_button = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-            )
-            download_button.click()
+        print(download_button_selector.get_attribute('outerHTML'))
+        send_telegram_message(download_button_selector.get_attribute('outerHTML'))
+        
+        download_button = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+        )
+        download_button.click()
 
         
 
