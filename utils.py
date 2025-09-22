@@ -305,7 +305,7 @@ def downloader(url):
         driver.get(url)
         
         if "sourceforge" in url:
-            timesleep(5)
+            time.sleep(5)
         
 
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
