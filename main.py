@@ -7,7 +7,7 @@ from utils import (
     download_file_with_aria2c,
     download_file_with_megatools,
     get_download_url_from_pixeldrain_api,
-    get_download_url_from_gofile
+    downloader
 )
 
 # Dapatkan URL halaman dari environment variable
@@ -39,9 +39,9 @@ def main_downloader(url):
         if download_url_pixeldrain:
             downloaded_filename = download_file_with_aria2c(download_url_pixeldrain, message_id=initial_message_id)
 
-    elif re.match(GOFILE_URL_REGEX, url):
+    elif "mediafire" in url or "gofile" in url:
         print("URL cocok dengan Gofile. Menggunakan Selenium...")
-        downloaded_filename = get_download_url_from_gofile(url)
+        downloaded_filename = downloader(url)
         
 
     else:
