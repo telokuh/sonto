@@ -267,7 +267,7 @@ def download_file_with_aria2c(url, headers=None, filename=None, message_id=None)
         return None
 
 
-def get_download_url_from_gofile(url):
+def downloader(url):
     """
     Mengunduh file GoFile secara langsung dengan mengonfigurasi preferensi browser
     dan menunggu secara dinamis hingga unduhan selesai, dengan notifikasi Telegram.
@@ -301,14 +301,20 @@ def get_download_url_from_gofile(url):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         driver.get(url)
-
+        
+        if "sourceforge" in url:
+            timesleep(5)
         
 
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
-        download_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-        )
-        download_button.click()
+        if "mediafire" in url:
+            download_button_selector = "#downloadButton"
+
+        if "sourceforge" not in url:
+            download_button = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+            )
+            download_button.click()
 
         
 
