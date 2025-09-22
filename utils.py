@@ -28,6 +28,8 @@ def get_download_url_from_pixeldrain_api(url):
     try:
         file_id = url.split('/')[-1]
         download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
+        if "sourceforge" in url:
+            download_url = url
         print(f"URL Unduhan Pixeldrain ditemukan: {download_url}")
         return download_url
     except Exception as e:
