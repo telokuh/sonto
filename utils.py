@@ -20,6 +20,56 @@ from selenium.common.exceptions import TimeoutException
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
+
+from urllib.parse import urlparse, urlunparse, urlencode
+
+def source_url(download_url):
+    """
+    Mengubah URL unduhan SourceForge menjadi URL pemilihan cermin.
+
+    Args:
+        download_url (str): URL unduhan SourceForge.
+
+    Returns:
+        str: URL pemilihan cermin yang baru.
+    """
+    try:
+        # Menguraikan URL yang diberikan
+        parsed_url = urlparse(download_url)
+        path_parts = parsed_url.path.split('/')
+        
+        # Ekstrak nama proyek dan nama file dari path
+        # Path: /projects/PROYEK/files/FILE/download
+        project_name = path_parts[2]
+        file_path = '/'.join(path_parts[4:-1])
+        
+        # Mengatur parameter query untuk URL baru
+        query_params = {
+            'projectname': project_name,
+            'filename': file_path
+        }
+        
+        # Membuat path baru dan URL baru
+        new_path = "/settings/mirror_choices"
+        new_url_parts = (
+            parsed_url.scheme,         # 'https'
+            parsed_url.netloc,         # 'sourceforge.net'
+            new_path,                  # '/settings/mirror_choices'
+            '',                        # params
+            urlencode(query_params),   # query
+            ''                         # fragment
+        )
+        
+        new_url = urlunparse(new_url_parts)
+        return new_url
+        
+    except IndexError:
+        print("Error: URL tidak dalam format SourceForge yang diharapkan.")
+        return None
+    except Exception as e:
+        print(f"Terjadi kesalahan: {e}")
+        return None
+
 def get_download_url_from_pixeldrain_api(url):
     """
     Mengambil URL unduhan langsung dari API Pixeldrain.
@@ -312,7 +362,14 @@ def downloader(url):
             download_button_selector = "#downloadButton"
         elif "sourceforge" in url:
             download_button_selector = "#remaining-buttons > div.large-12 > a.button.green"
+            driver.get(source_url(url))
+            
+            list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
 
+
+            for item in list_items:
+                item_id = item.get_attribute("id")
+                print(f"ID yang ditemukan: {item_id}")
         
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
