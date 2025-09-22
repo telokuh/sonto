@@ -316,13 +316,13 @@ def get_download_url_from_gofile(url):
         timeout = 300
         
         last_check_time = time.time()
-
+        counter = 10
         while time.time() - start_time < timeout:
             is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(download_dir))
             
             # Perbarui pesan Telegram setiap 30 detik untuk menunjukkan unduhan sedang berjalan
             if is_downloading and time.time() - last_check_time > 3:
-                counter = 10
+                
                 edit_telegram_message(initial_message_id, f"⬇️ {counter}0%")
                 last_check_time = time.time()
                 counter += 10
