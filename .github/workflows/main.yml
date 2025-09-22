@@ -22,6 +22,7 @@ jobs:
 
 
       - name: Cache APT packages
+        if: contains(github.event.client_payload.url, 'mega.nz')
         uses: actions/cache@v3
         with:
           path: |
@@ -33,6 +34,8 @@ jobs:
            
 
       - name: Disable installing package docs
+        if: contains(github.event.client_payload.url, 'mega.nz')
+        
         run: |
            sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
            path-exclude /usr/share/doc/*
@@ -41,6 +44,8 @@ jobs:
            EOF
 
       - name: Install megatools
+        if: contains(github.event.client_payload.url, 'mega.nz')
+        
         run: |
           #sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
