@@ -34,7 +34,7 @@ def main_downloader(url):
         downloaded_filename = download_file_with_megatools(url)
     
     elif re.match(PIXELDRAIN_URL_REGEX, url):
-        print("URL cocok dengan Pixeldrain. Menggunakan API...")
+        print("URL download with aria2c .")
         download_url_pixeldrain = get_download_url_from_pixeldrain_api(url)
         if download_url_pixeldrain:
             downloaded_filename = download_file_with_aria2c(download_url_pixeldrain, message_id=initial_message_id)
