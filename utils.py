@@ -323,7 +323,7 @@ def get_download_url_from_gofile(url):
             # Perbarui pesan Telegram setiap 30 detik untuk menunjukkan unduhan sedang berjalan
             if is_downloading and time.time() - last_check_time > 3:
                 
-                edit_telegram_message(initial_message_id, f"⬇️ {counter}0%")
+                edit_telegram_message(initial_message_id, f"⬇️ {counter}%")
                 last_check_time = time.time()
                 counter += 10
             if not is_downloading:
