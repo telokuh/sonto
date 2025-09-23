@@ -291,10 +291,11 @@ def get_total_file_size_safe(url):
     # Opsi 2: Menggunakan streaming (jika opsi 1 gagal)
     print("Mencoba mendapatkan ukuran file dengan streaming...")
     total_size = 0
+    chunk_size = 500 * 1024 * 1024
     try:
         with requests.get(url, stream=True, timeout=30) as r:
             r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=8192):
+            for chunk in r.iter_content(chunk_size=chunk_size):
                 total_size += len(chunk)
             print(f"✅ Ukuran file ditemukan dari streaming: {total_size} bytes.")
             return total_size
