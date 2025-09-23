@@ -63,8 +63,8 @@ def main_downloader(url):
             f.write(downloaded_filename)
         send_telegram_message(f"✅ **Selesai!**\nFile `{downloaded_filename}` berhasil diunduh dan sedang dibuatkan rilis di GitHub.")
     else:
-        print("Tidak dapat menemukan URL unduhan. Proses dihentikan.")
-        send_telegram_message("❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
+        print(f"{downloaded_filename} Tidak dapat menemukan URL unduhan. Proses dihentikan.")
+        send_telegram_message(f"{downloaded_filename} ❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
         exit(1)
 
 # Panggil fungsi utama dengan URL dari environment variable
