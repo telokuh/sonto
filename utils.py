@@ -273,21 +273,21 @@ def download_with_yt_dlp(url, message_id=None):
 def download_file_with_aria2c(urls, output_filename):
     """
     Mengunduh file menggunakan aria2c. Menghentikan proses
-    setelah file dengan nama yang ditentukan selesai diunduh.
+    setelah ada file yang selesai diunduh.
     """
-    print(f"Mencoba mengunduh file {output_filename} dengan aria2c.")
-    
+    print("Memulai unduhan dengan aria2c.")
+
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
         '-x', '16', '-s', '16', '-c',
         '--async-dns=false', '--log-level=warn', '--continue',
-        '--input-file', '-',
-        '-o', output_filename
+        '--input-file', '-'
     ]
 
     process = None
-    
+    download_dir = os.getcwd() # Asumsi direktori unduhan adalah direktori saat ini.
+
     try:
         # Panggil aria2c sebagai subprocess
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -299,38 +299,26 @@ def download_file_with_aria2c(urls, output_filename):
         
         start_time = time.time()
         timeout = 300  # Batas waktu total dalam detik
-        last_file_size = -1
-        size_check_count = 0
         
         while time.time() - start_time < timeout:
-            # Tunggu sampai file unduhan ada
-            if os.path.exists(output_filename):
-                current_file_size = os.path.getsize(output_filename)
-
-                # Jika ukuran file tidak berubah
-                if current_file_size == last_file_size and current_file_size > 0:
-                    size_check_count += 1
-                else:
-                    size_check_count = 0
-                
-                # Perbarui ukuran file terakhir
-                last_file_size = current_file_size
-
-                # Jika ukuran file stabil dan lebih dari 0 byte, anggap unduhan selesai
-                if size_check_count >= 5: # Cek 5 kali berturut-turut
-                    print(f"File {output_filename} selesai. Menghentikan aria2c...")
-                    process.terminate()
-                    time.sleep(1)
-                    if process.poll() is None:
-                        process.kill()
-                    return output_filename
+            # Cari file yang tidak memiliki ekstensi ".aria2" atau ".tmp"
+            finished_files = [f for f in os.listdir(download_dir) if not f.endswith(('.aria2', '.tmp'))]
+            
+            if finished_files.index(output_filename.strip()):
+                final_file = output_filename
+                print(f"File {final_file} selesai. Menghentikan aria2c...")
+                process.terminate()
+                time.sleep(1) # Beri waktu untuk proses berhenti
+                if process.poll() is None: # Jika masih belum berhenti
+                    process.kill()
+                return final_file
             
             # Jika proses aria2c berhenti sendiri sebelum selesai
             if process.poll() is not None:
                 print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
                 return None
             
-            time.sleep(1) # Periksa setiap 2 detik
+            time.sleep(2) # Periksa setiap 2 detik
 
         print("Waktu habis. Menghentikan aria2c.")
         if process and process.poll() is None:
@@ -346,7 +334,6 @@ def download_file_with_aria2c(urls, output_filename):
             process.kill()
 
     return None
-
 
 def downloader(url):
     """
