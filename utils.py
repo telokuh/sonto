@@ -292,13 +292,12 @@ def download_file_with_aria2c(urls):
 
         while time.time() - start_time < timeout:
             finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
-            if finished_files:
+            if finished_files and "README.md" not in finished_files[0]:
                 print(f"File {finished_files[0]} selesai. Menghentikan aria2c...")
                 process.terminate()
                 time.sleep(1)
                 if process.poll() is None:
-                    if "README.md" not in finished_files[0]:
-                       process.kill()
+                    process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
                 return finished_files[0]
@@ -382,9 +381,10 @@ def downloader(url):
             )
             ahref = download_button.get_attribute('href')
             download_url = []
-            for item in li_id:
-                download_url.append(f"{set_url(ahref, 'use_mirror', item)}&r=")
-                print( download_url )
+            for arr in li_id:
+                download_url.append(f"{set_url(ahref, 'use_mirror', arr)}&r=")
+           
+            print( download_url )
             download_file_with_aria2c(download_url)
             send_telegram_message(download_url)
 
