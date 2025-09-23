@@ -270,13 +270,19 @@ def download_with_yt_dlp(url, message_id=None):
         return False
 
 
-def download_file_with_aria2c(urls, name):
-
+def download_file_with_aria2c(urls, output_filename):
+    """
+    Mengunduh file menggunakan aria2c dan menamai file yang diunduh.
+    """
+    print(f"Mengunduh file {output_filename} dengan aria2c.")
+    
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
         '-x', '16', '-s', '16', '-c',
-        '--async-dns=false', '--log-level=warn', '--continue', '--input-file', '-'
+        '--async-dns=false', '--log-level=warn', '--continue',
+        '--input-file', '-',
+        '-o', output_filename  # Tambahkan nama file output
     ]
 
     process = None
@@ -288,20 +294,27 @@ def download_file_with_aria2c(urls, name):
         process.stdin.close()
         
         start_time = time.time()
-        timeout = 300 # Batas waktu total dalam detik
+        timeout = 300  # Batas waktu total dalam detik
 
         while time.time() - start_time < timeout:
-            finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
-            if name in finished_files:
-                print(f"File {finished_files[name]} selesai. Menghentikan aria2c...{name}")
+            # Periksa apakah file dengan nama yang ditentukan sudah ada
+            if os.path.exists(output_filename):
+                print(f"File {output_filename} selesai. Menghentikan aria2c...")
                 process.terminate()
                 time.sleep(1)
                 if process.poll() is None:
                     process.kill()
-                
-                # Mengembalikan nama file yang pertama selesai
-                return name
-
+                return output_filename
+            
+            # Periksa jika proses telah selesai karena alasan lain
+            if process.poll() is not None:
+                if process.returncode == 0:
+                    print(f"Aria2c selesai dengan sukses. File {output_filename} sudah diunduh.")
+                    return output_filename
+                else:
+                    print(f"Aria2c gagal dengan kode {process.returncode}.")
+                    return None
+            
             time.sleep(2)
 
         print("Waktu habis. Menghentikan aria2c.")
@@ -311,13 +324,14 @@ def download_file_with_aria2c(urls, name):
             process.kill()
 
     except Exception as e:
-        print(f"Terjadi kesalahan: {e}")
+        print(f"Terjadi kesalahan saat menjalankan aria2c: {e}")
         if process and process.poll() is None:
             process.terminate()
             time.sleep(1)
             process.kill()
 
     return None
+
 
 def downloader(url):
     """
