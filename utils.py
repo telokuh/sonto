@@ -392,11 +392,7 @@ def downloader(url):
             download_button = WebDriverWait(driver, 20).until(
               EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
-
-        print(download_button.get_attribute('outerHTML'))
-        send_telegram_message(download_button.get_attribute('outerHTML'))
-        
-        download_button.click()
+            download_button.click()
 
         
 
