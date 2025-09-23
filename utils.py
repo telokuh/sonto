@@ -272,9 +272,10 @@ def download_with_yt_dlp(url, message_id=None):
 
 def download_file_with_aria2c(urls, output_filename):
     """
-    Mengunduh file menggunakan aria2c dan menamai file yang diunduh.
+    Mengunduh file menggunakan aria2c. Menghentikan proses
+    setelah file dengan nama yang ditentukan selesai diunduh.
     """
-    print(f"Mengunduh file {output_filename} dengan aria2c.")
+    print(f"Mencoba mengunduh file {output_filename} dengan aria2c.")
     
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
@@ -282,40 +283,54 @@ def download_file_with_aria2c(urls, output_filename):
         '-x', '16', '-s', '16', '-c',
         '--async-dns=false', '--log-level=warn', '--continue',
         '--input-file', '-',
-        '-o', output_filename  # Tambahkan nama file output
+        '-o', output_filename
     ]
 
     process = None
+    
     try:
+        # Panggil aria2c sebagai subprocess
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
+        # Kirim semua URL ke stdin aria2c
         for url in urls:
             process.stdin.write(url + '\n')
         process.stdin.close()
         
         start_time = time.time()
         timeout = 300  # Batas waktu total dalam detik
-
+        last_file_size = -1
+        size_check_count = 0
+        
         while time.time() - start_time < timeout:
-            # Periksa apakah file dengan nama yang ditentukan sudah ada
+            # Tunggu sampai file unduhan ada
             if os.path.exists(output_filename):
-                print(f"File {output_filename} selesai. Menghentikan aria2c...")
-                process.terminate()
-                time.sleep(1)
-                if process.poll() is None:
-                    process.kill()
-                return output_filename
-            
-            # Periksa jika proses telah selesai karena alasan lain
-            if process.poll() is not None:
-                if process.returncode == 0:
-                    print(f"Aria2c selesai dengan sukses. File {output_filename} sudah diunduh.")
-                    return output_filename
+                current_file_size = os.path.getsize(output_filename)
+
+                # Jika ukuran file tidak berubah
+                if current_file_size == last_file_size and current_file_size > 0:
+                    size_check_count += 1
                 else:
-                    print(f"Aria2c gagal dengan kode {process.returncode}.")
-                    return None
+                    size_check_count = 0
+                
+                # Perbarui ukuran file terakhir
+                last_file_size = current_file_size
+
+                # Jika ukuran file stabil dan lebih dari 0 byte, anggap unduhan selesai
+                if size_check_count >= 5: # Cek 5 kali berturut-turut
+                    print(f"File {output_filename} selesai. Menghentikan aria2c...")
+                    process.terminate()
+                    time.sleep(1)
+                    if process.poll() is None:
+                        process.kill()
+                    return output_filename
             
-            time.sleep(2)
+            # Jika proses aria2c berhenti sendiri sebelum selesai
+            if process.poll() is not None:
+                print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
+                return None
+            
+            time.sleep(1) # Periksa setiap 2 detik
 
         print("Waktu habis. Menghentikan aria2c.")
         if process and process.poll() is None:
