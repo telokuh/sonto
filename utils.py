@@ -272,16 +272,6 @@ def download_with_yt_dlp(url, message_id=None):
 
 
 def download_file_with_aria2c(urls):
-    """
-    Mengunduh file secara paralel menggunakan aria2c dan berhenti setelah satu unduhan selesai.
-    
-    Args:
-        urls (list): Daftar URL yang akan diunduh.
-        
-    Returns:
-        str: Nama file yang pertama selesai diunduh, atau None jika gagal.
-    """
-    print("Memulai unduhan paralel dengan aria2c dan berhenti setelah satu selesai...")
 
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
@@ -378,15 +368,19 @@ def downloader(url):
             driver.get(source_url(url))
             list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
             
+            li_id = []
+            for item in list_items:
+                item_id = item.get_attribute("id")
+                li_id.append(item_id)
             driver.get(url)
             download_button = WebDriverWait(driver, 20).until(
                   EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
             ahref = download_button.get_attribute('href')
             download_url = []
-            for item in list_items:
-                item_id = item.get_attribute("id")
-                download_url.append(set_url(ahref, 'use_mirror', item_id))
+            for item in li_id:
+                download_url.append(set_url(ahref, 'use_mirror', item))
+            
             download_file_with_aria2c(download_url, headers=None, filename=None, message_id=None)
 
         
