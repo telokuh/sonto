@@ -297,7 +297,8 @@ def download_file_with_aria2c(urls):
                 process.terminate()
                 time.sleep(1)
                 if process.poll() is None:
-                    process.kill()
+                    if "README.md" not in finished_files[0]:
+                       process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
                 return finished_files[0]
