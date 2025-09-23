@@ -383,7 +383,7 @@ def downloader(url):
             ahref = download_button.get_attribute('href')
             download_url = []
             for item in li_id:
-                download_url.append(set_url(ahref, 'use_mirror', item))
+                download_url.append(f"{set_url(ahref, 'use_mirror', item)}&r=")
                 print( set_url(ahref, 'use_mirror', item) )
             download_file_with_aria2c(download_url)
             send_telegram_message(download_url)
