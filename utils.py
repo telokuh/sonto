@@ -326,15 +326,14 @@ def download_file_with_aria2c(urls, output_filename):
 
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        fasturl = None
+        
         for url in urls:
             total_size = get_total_file_size_safe(url)
             if total_size is not None:
-               fasturl = url
-               return
+               process.stdin.write(url + '\n')
                print("Peringatan: Tidak dapat menentukan ukuran file total. Menggunakan metode deteksi yang kurang akurat.")
 
-        process.stdin.write(fasturl + '\n')
+            
         process.stdin.close()
         
         start_time = time.time()
