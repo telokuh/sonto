@@ -15,13 +15,12 @@ import shutil
 import glob
 import math
 from selenium.common.exceptions import TimeoutException
-
+from urllib.parse import urlparse, urlunparse, urlencode
 # Ambil token bot dan chat ID dari environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
 
-from urllib.parse import urlparse, urlunparse, urlencode
 
 def set_url(url, param_name, param_value):
     """Mengganti nilai parameter URL tertentu."""
