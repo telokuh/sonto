@@ -331,7 +331,7 @@ def download_file_with_aria2c(urls, output_filename):
             total_size = get_total_file_size_safe(url)
             if total_size is not None:
                process.stdin.write(url + '\n')
-               print("Peringatan: Tidak dapat menentukan ukuran file total. Menggunakan metode deteksi yang kurang akurat.")
+               break
 
             
         process.stdin.close()
