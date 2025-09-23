@@ -23,6 +23,26 @@ OWNER_ID = os.environ.get("OWNER_ID")
 
 from urllib.parse import urlparse, urlunparse, urlencode
 
+def set_url(url, param_name, param_value):
+    """Mengganti nilai parameter URL tertentu."""
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    
+    query_params[param_name] = [param_value]
+    
+    new_query = urlencode(query_params, doseq=True)
+    
+    new_url = urlunparse((
+        parsed_url.scheme,
+        parsed_url.netloc,
+        parsed_url.path,
+        parsed_url.params,
+        new_query,
+        parsed_url.fragment
+    ))
+    
+    return new_url
+
 def source_url(download_url):
     """
     Mengubah URL unduhan SourceForge menjadi URL pemilihan cermin.
@@ -250,74 +270,65 @@ def download_with_yt_dlp(url, message_id=None):
         send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {str(e)[:150]}...")
         return False
 
-def download_file_with_aria2c(url, headers=None, filename=None, message_id=None):
-    """
-    Mengunduh file menggunakan aria2c dan mengembalikan nama file yang diunduh,
-    dengan menyertakan header dari permintaan.
-    """
-    print(f"Mulai unduhan dengan aria2c: {url}")
-    
-    if not filename:
-        try:
-            with requests.get(url, stream=True, allow_redirects=True, timeout=10) as r:
-                r.raise_for_status()
-                if 'content-disposition' in r.headers:
-                    match = re.search(r'filename="?([^";]+)"?', r.headers['content-disposition'])
-                    if match:
-                        filename = match.group(1)
-                if not filename:
-                    filename = url.split('/')[-1].split('?')[0]
-                    if not filename:
-                        filename = "unduhan_tanpa_nama"
-        except Exception as e:
-            print(f"Gagal mendapatkan nama file dari URL: {e}")
-            send_telegram_message(f"❌ Gagal mendapatkan nama file. Mengunduh tanpa nama.\n\nURL: {url}")
-            filename = "unduhan_tanpa_nama"
 
-    print(f"Nama file yang akan diunduh: {filename}")
+def download_file_with_aria2c(urls):
+    """
+    Mengunduh file secara paralel menggunakan aria2c dan berhenti setelah satu unduhan selesai.
     
+    Args:
+        urls (list): Daftar URL yang akan diunduh.
+        
+    Returns:
+        str: Nama file yang pertama selesai diunduh, atau None jika gagal.
+    """
+    print("Memulai unduhan paralel dengan aria2c dan berhenti setelah satu selesai...")
+
     command = [
-        'aria2c',
-        '--allow-overwrite', '--file-allocation=none',
+        'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
         '-x', '16', '-s', '16', '-c',
+        '--async-dns=false', '--log-level=warn', '--continue', '--input-file', '-'
     ]
 
-    if headers:
-        for key, value in headers.items():
-            command.extend(['--header', f'{key}: {value}'])
-    
-    command.extend(['-o', filename, url])
-    
+    process = None
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        last_percent_notified = -1
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
-        while True:
-            line = process.stdout.readline()
-            if not line: break
-            
-            progress_match = re.search(r'\[.+?\]\s+(\d+\.\d+)%\s+DL:\s+([\d\.]+[KMGTP]B)\s+', line)
-            
-            if progress_match:
-                percent = int(float(progress_match.group(1)))
-                downloaded_size = progress_match.group(2)
+        for url in urls:
+            process.stdin.write(url + '\n')
+        process.stdin.close()
+        
+        start_time = time.time()
+        timeout = 300 # Batas waktu total dalam detik
+
+        while time.time() - start_time < timeout:
+            finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
+            if finished_files:
+                print(f"File {finished_files[0]} selesai. Menghentikan aria2c...")
+                process.terminate()
+                time.sleep(1)
+                if process.poll() is None:
+                    process.kill()
                 
-                if percent >= last_percent_notified + 10 or percent == 100:
-                    message = f"⬇️ **Mengunduh...**\n`{filename}`\nUkuran: `{downloaded_size}`\nProgres: `{percent}%`"
-                    edit_telegram_message(message_id, message)
-                    last_percent_notified = percent
-        
-        process.wait()
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, command, output=process.stdout.read())
+                # Mengembalikan nama file yang pertama selesai
+                return finished_files[0]
 
-        return filename
+            time.sleep(2)
+
+        print("Waktu habis. Menghentikan aria2c.")
+        if process and process.poll() is None:
+            process.terminate()
+            time.sleep(1)
+            process.kill()
+
     except Exception as e:
-        print(f"aria2c gagal: {e}")
-        send_telegram_message(f"❌ **aria2c gagal.**\n\nDetail: {str(e)[:150]}...")
-        return None
+        print(f"Terjadi kesalahan: {e}")
+        if process and process.poll() is None:
+            process.terminate()
+            time.sleep(1)
+            process.kill()
 
+    return None
 
 def downloader(url):
     """
@@ -357,23 +368,32 @@ def downloader(url):
         
         
 
-        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
-        if "mediafire" in url:
+        if "gofile" in url:
+            download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
+        elif "mediafire" in url:
             download_button_selector = "#downloadButton"
         elif "sourceforge" in url:
             download_button_selector = "#remaining-buttons > div.large-12 > a.button.green"
+           
             driver.get(source_url(url))
-            
             list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
-
-
+            
+            driver.get(url)
+            download_button = WebDriverWait(driver, 20).until(
+                  EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+            )
+            ahref = download_button.get_attribute('href')
+            download_url = []
             for item in list_items:
                 item_id = item.get_attribute("id")
-                print(f"ID yang ditemukan: {item_id}")
+                download_url.append(set_url(ahref, 'use_mirror', item_id))
+            download_file_with_aria2c(download_url, headers=None, filename=None, message_id=None)
+
         
-        download_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-        )
+        else:
+            download_button = WebDriverWait(driver, 20).until(
+              EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+            )
 
         print(download_button.get_attribute('outerHTML'))
         send_telegram_message(download_button.get_attribute('outerHTML'))
