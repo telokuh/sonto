@@ -292,7 +292,7 @@ def download_file_with_aria2c(urls, name):
 
         while time.time() - start_time < timeout:
             finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
-            if finished_files and name in finished_files:
+            if finished_files:
                 print(f"File {finished_files[0]} selesai. Menghentikan aria2c...{name}")
                 process.terminate()
                 time.sleep(1)
@@ -300,7 +300,7 @@ def download_file_with_aria2c(urls, name):
                     process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
-                return name
+                return finished_files[0]
 
             time.sleep(2)
 
@@ -390,7 +390,7 @@ def downloader(url):
             print( download_url )
             download_file_with_aria2c(download_url, aname)
             send_telegram_message(download_url)
-
+            return
         
         else:
             download_button = WebDriverWait(driver, 20).until(
