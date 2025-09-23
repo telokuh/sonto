@@ -270,7 +270,7 @@ def download_with_yt_dlp(url, message_id=None):
         return False
 
 
-def download_file_with_aria2c(urls):
+def download_file_with_aria2c(urls, name):
 
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
@@ -292,15 +292,15 @@ def download_file_with_aria2c(urls):
 
         while time.time() - start_time < timeout:
             finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
-            if finished_files and "README.md" not in finished_files[0]:
-                print(f"File {finished_files[0]} selesai. Menghentikan aria2c...")
+            if finished_files and name in finished_files:
+                print(f"File {finished_files[0]} selesai. Menghentikan aria2c...{name}")
                 process.terminate()
                 time.sleep(1)
                 if process.poll() is None:
                     process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
-                return finished_files[0]
+                return name
 
             time.sleep(2)
 
@@ -379,13 +379,14 @@ def downloader(url):
             download_button = WebDriverWait(driver, 20).until(
                   EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
+            aname = driver.find_elements(By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div").text
             ahref = download_button.get_attribute('href')
             download_url = []
             for arr in li_id:
                 download_url.append(f"{set_url(ahref, 'use_mirror', arr)}&r=")
            
             print( download_url )
-            download_file_with_aria2c(download_url)
+            download_file_with_aria2c(download_url, aname)
             send_telegram_message(download_url)
 
         
