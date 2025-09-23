@@ -300,7 +300,7 @@ def download_file_with_aria2c(urls, name):
                     process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
-                return finished_files[name]
+                return name
 
             time.sleep(2)
 
