@@ -310,10 +310,7 @@ def download_file_with_aria2c(urls, output_filename):
     """
     print(f"Memulai unduhan {output_filename} dengan aria2c.")
 
-    total_size = get_total_file_size_safe(urls[0])
-    if total_size is None:
-        print("Peringatan: Tidak dapat menentukan ukuran file total. Menggunakan metode deteksi yang kurang akurat.")
-
+    total_size = None 
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
@@ -328,9 +325,15 @@ def download_file_with_aria2c(urls, output_filename):
 
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        
+        fasturl = None
         for url in urls:
-            process.stdin.write(url + '\n')
+            total_size = get_total_file_size_safe(url)
+            if total_size is not None:
+               fasturl = url
+               return
+               print("Peringatan: Tidak dapat menentukan ukuran file total. Menggunakan metode deteksi yang kurang akurat.")
+
+        process.stdin.write(fasturl + '\n')
         process.stdin.close()
         
         start_time = time.time()
