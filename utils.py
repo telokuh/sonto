@@ -304,7 +304,7 @@ def download_file_with_aria2c(urls, output_filename):
             # Cari file yang tidak memiliki ekstensi ".aria2" atau ".tmp"
             finished_files = [f for f in os.listdir(download_dir) if not f.endswith(('.aria2', '.tmp'))]
             
-            if finished_files.index(output_filename.strip()):
+            if output_filename.strip() in finished_files:
                 final_file = output_filename
                 print(f"File {final_file} selesai. Menghentikan aria2c...")
                 process.terminate()
