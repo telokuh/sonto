@@ -366,7 +366,7 @@ def downloader(url):
            
             driver.get(source_url(url))
             list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
-            
+            send_telegram_message(list_items.get_attribute("outerHTML"))
             li_id = []
             for item in list_items:
                 item_id = item.get_attribute("id")
@@ -379,7 +379,7 @@ def downloader(url):
             download_url = []
             for item in li_id:
                 download_url.append(set_url(ahref, 'use_mirror', item))
-            
+                send_telegram_message( set_url(ahref, 'use_mirror', item) )
             download_file_with_aria2c(download_url, headers=None, filename=None, message_id=None)
 
         
