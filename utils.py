@@ -380,8 +380,9 @@ def downloader(url):
             download_url = []
             for item in li_id:
                 download_url.append(set_url(ahref, 'use_mirror', item))
-                send_telegram_message( set_url(ahref, 'use_mirror', item) )
+                print( set_url(ahref, 'use_mirror', item) )
             download_file_with_aria2c(download_url)
+            send_telegram_message(download_url)
 
         
         else:
