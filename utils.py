@@ -292,15 +292,15 @@ def download_file_with_aria2c(urls, name):
 
         while time.time() - start_time < timeout:
             finished_files = [f for f in os.listdir('.') if not f.endswith(('.crdownload', '.tmp'))]
-            if finished_files:
-                print(f"File {finished_files[0]} selesai. Menghentikan aria2c...{name}")
+            if name in finished_files:
+                print(f"File {finished_files[name]} selesai. Menghentikan aria2c...{name}")
                 process.terminate()
                 time.sleep(1)
                 if process.poll() is None:
                     process.kill()
                 
                 # Mengembalikan nama file yang pertama selesai
-                return finished_files[0]
+                return finished_files[name]
 
             time.sleep(2)
 
