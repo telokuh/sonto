@@ -374,7 +374,7 @@ def downloader(url):
                 #send_telegram_message(item_id)
             
 
-            send_telegram_message(f"{source_url} {li_id}")
+            send_telegram_message(f"{source_url(url)} {li_id}")
             driver.get(url)
             download_button = WebDriverWait(driver, 20).until(
                   EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
