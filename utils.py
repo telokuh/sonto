@@ -270,55 +270,93 @@ def download_with_yt_dlp(url, message_id=None):
         return False
 
 
+
+def get_total_file_size_safe(url):
+    """
+    Mendapatkan ukuran file total dari URL dengan aman.
+    Opsi 1: Menggunakan requests.head() untuk header.
+    Opsi 2: Menggunakan requests dengan streaming jika opsi 1 gagal.
+    """
+    # Opsi 1: Menggunakan permintaan HEAD (lebih cepat dan lebih disukai)
+    try:
+        response = requests.head(url, allow_redirects=True, timeout=10)
+        response.raise_for_status()
+        content_length = response.headers.get('Content-Length')
+        if content_length:
+            print(f"✅ Ukuran file ditemukan dari header: {int(content_length)} bytes.")
+            return int(content_length)
+    except requests.exceptions.RequestException as e:
+        print(f"Peringatan: Gagal mendapatkan header Content-Length: {e}")
+
+    # Opsi 2: Menggunakan streaming (jika opsi 1 gagal)
+    print("Mencoba mendapatkan ukuran file dengan streaming...")
+    total_size = 0
+    try:
+        with requests.get(url, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=8192):
+                total_size += len(chunk)
+            print(f"✅ Ukuran file ditemukan dari streaming: {total_size} bytes.")
+            return total_size
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Gagal mendapatkan ukuran file melalui streaming: {e}")
+    
+    return None
+
 def download_file_with_aria2c(urls, output_filename):
     """
     Mengunduh file menggunakan aria2c. Menghentikan proses
-    setelah ada file yang selesai diunduh.
+    setelah file mencapai ukuran penuh yang diharapkan.
     """
-    print("Memulai unduhan dengan aria2c.")
+    print(f"Memulai unduhan {output_filename} dengan aria2c.")
+
+    total_size = get_total_file_size_safe(urls[0])
+    if total_size is None:
+        print("Peringatan: Tidak dapat menentukan ukuran file total. Menggunakan metode deteksi yang kurang akurat.")
 
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
         '-x', '16', '-s', '16', '-c',
         '--async-dns=false', '--log-level=warn', '--continue',
-        '--input-file', '-'
+        '--input-file', '-',
+        '-o', output_filename
     ]
 
     process = None
-    download_dir = os.getcwd() # Asumsi direktori unduhan adalah direktori saat ini.
+    aria2_temp_file = output_filename + '.aria2'
 
     try:
-        # Panggil aria2c sebagai subprocess
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         
-        # Kirim semua URL ke stdin aria2c
         for url in urls:
             process.stdin.write(url + '\n')
         process.stdin.close()
         
         start_time = time.time()
-        timeout = 300  # Batas waktu total dalam detik
+        timeout = 300
         
         while time.time() - start_time < timeout:
-            # Cari file yang tidak memiliki ekstensi ".aria2" atau ".tmp"
-            finished_files = [f for f in os.listdir(download_dir) if not f.endswith(('.aria2', '.tmp'))]
+            if os.path.exists(output_filename):
+                current_size = os.path.getsize(output_filename)
+                
+                # Kondisi yang disempurnakan
+                if (total_size is not None and current_size >= total_size) or not os.path.exists(aria2_temp_file):
+                    print(f"File {output_filename} selesai. Menghentikan aria2c...")
+                    process.terminate()
+                    time.sleep(1)
+                    if process.poll() is None:
+                        process.kill()
+                    return output_filename
             
-            if output_filename.strip() in finished_files:
-                final_file = output_filename
-                print(f"File {final_file} selesai. Menghentikan aria2c...")
-                process.terminate()
-                time.sleep(1) # Beri waktu untuk proses berhenti
-                if process.poll() is None: # Jika masih belum berhenti
-                    process.kill()
-                return final_file
-            
-            # Jika proses aria2c berhenti sendiri sebelum selesai
             if process.poll() is not None:
+                if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
+                    return output_filename
+                
                 print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
                 return None
             
-            time.sleep(2) # Periksa setiap 2 detik
+            time.sleep(2)
 
         print("Waktu habis. Menghentikan aria2c.")
         if process and process.poll() is None:
