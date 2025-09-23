@@ -317,18 +317,16 @@ def download_file_with_aria2c(urls, name):
             time.sleep(1)
             process.kill()
 
-    return name
+    return None
 
 def downloader(url):
     """
-    Mengunduh file GoFile secara langsung dengan mengonfigurasi preferensi browser
-    dan menunggu secara dinamis hingga unduhan selesai, dengan notifikasi Telegram.
+    Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium
+    dan alat lain yang sesuai, dengan notifikasi Telegram.
     """
-    print("Memulai unduhan GoFile. Menunggu unduhan selesai secara dinamis...")
+    print("Memulai unduhan. Menunggu unduhan selesai secara dinamis...")
 
-    # Kirim pesan awal ke Telegram
-    initial_message_id = send_telegram_message("⬇️ 9%")
-
+    initial_message_id = None
     download_dir = os.path.join(os.getcwd(), "downloads")
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
@@ -339,103 +337,109 @@ def downloader(url):
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
     }
-    
+
     options = webdriver.ChromeOptions()
     options.add_experimental_option("prefs", chrome_prefs)
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_experimental_option("mobileEmulation", {"deviceName": "Nexus 5"})
-    
+
     driver = None
     downloaded_filename = None
-    
+
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
-        driver.get(url)
         
-        
-
-        if "gofile" in url:
-            download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
-        elif "mediafire" in url:
-            download_button_selector = "#downloadButton"
-        elif "sourceforge" in url:
-            download_button_selector = "#remaining-buttons > div.large-12 > a.button.green"
-           
-            driver.get(source_url(url))
-            list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
+        # Logika khusus untuk SourceForge
+        if "sourceforge" in url:
+            print("Mengunduh dari SourceForge...")
+            initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari SourceForge...**")
             
-            li_id = []
-            for item in list_items:
-                item_id = item.get_attribute("id")
-                li_id.append(item_id)
-                #send_telegram_message(item_id)
+            # Mendapatkan URL cermin dan nama file
+            mirror_url = source_url(url)
+            driver.get(mirror_url)
             
-
-            send_telegram_message(f"{source_url(url)} {li_id}")
+            list_items = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul#mirrorList > li"))
+            )
+            
+            li_id = [item.get_attribute("id") for item in list_items]
+            
             driver.get(url)
             download_button = WebDriverWait(driver, 20).until(
-                  EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#remaining-buttons > div.large-12 > a.button.green"))
             )
+            
             aname = WebDriverWait(driver, 10).until(
-                  EC.visibility_of_element_located((By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div"))
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div"))
             ).text
+            
             ahref = download_button.get_attribute('href')
-            download_url = []
-            for arr in li_id:
-                download_url.append(f"{set_url(ahref, 'use_mirror', arr)}&r=")
-           
-            print( download_url )
-            download_file_with_aria2c(download_url, aname)
-            send_telegram_message(download_url)
-            return
-        
+            
+            # Membuat daftar URL unduhan dengan setiap cermin
+            download_urls = [set_url(ahref, 'use_mirror', mirror_id) for mirror_id in li_id]
+            
+            # Panggil aria2c untuk memulai unduhan
+            edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{aname}`")
+            downloaded_filename = download_file_with_aria2c(download_urls, aname)
+            
+            if downloaded_filename:
+                edit_telegram_message(initial_message_id, f"✅ **SourceForge: Unduhan selesai!**\nFile: `{downloaded_filename}`")
+            else:
+                edit_telegram_message(initial_message_id, "❌ **SourceForge: Unduhan gagal atau melebihi batas waktu!**")
+            
+            return downloaded_filename # Kembali dan selesaikan eksekusi
+
+        # Logika umum untuk GoFile dan Mediafire
         else:
+            initial_message_id = send_telegram_message("⬇️ **Mulai mengunduh...**")
+            if "gofile" in url:
+                download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
+            elif "mediafire" in url:
+                download_button_selector = "#downloadButton"
+            else:
+                raise ValueError("URL tidak didukung oleh downloader ini.")
+
             download_button = WebDriverWait(driver, 20).until(
-              EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
+                EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
             download_button.click()
 
-        
-
-        start_time = time.time()
-        timeout = 300
-        
-        last_check_time = time.time()
-        counter = 10
-        while time.time() - start_time < timeout:
-            is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(download_dir))
+            start_time = time.time()
+            timeout = 300
             
-            # Perbarui pesan Telegram setiap 30 detik untuk menunjukkan unduhan sedang berjalan
-            if is_downloading and time.time() - last_check_time > 3:
+            # Menunggu unduhan selesai
+            while time.time() - start_time < timeout:
+                is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(download_dir))
                 
-                edit_telegram_message(initial_message_id, f"⬇️ {counter}%")
-                last_check_time = time.time()
-                counter += 10
-            if not is_downloading:
-                print("Unduhan selesai!")
-                break
-            time.sleep(2)
-        else:
-            edit_telegram_message(initial_message_id, "❌ **GoFile: Unduhan gagal atau melebihi batas waktu!**")
-            print("Unduhan gagal atau melebihi batas waktu.")
-            return None
+                if not is_downloading:
+                    print("Unduhan selesai!")
+                    break
+                
+                time.sleep(2)
+            else:
+                edit_telegram_message(initial_message_id, "❌ **Unduhan gagal atau melebihi batas waktu!**")
+                print("Unduhan gagal atau melebihi batas waktu.")
+                return None
 
-        list_of_files = [f for f in os.listdir(download_dir) if not f.endswith(('.crdownload', '.tmp'))]
-        if list_of_files:
-            latest_file = max([os.path.join(download_dir, f) for f in list_of_files], key=os.path.getctime)
-            downloaded_filename = os.path.basename(latest_file)
-            print(f"File berhasil diunduh: {downloaded_filename}")
-            edit_telegram_message(initial_message_id, f"✅ **GoFile: Unduhan selesai!**\nFile: `{downloaded_filename}`")
-        else:
-            edit_telegram_message(initial_message_id, "❌ **GoFile: Gagal menemukan file yang diunduh.**")
-            return None
-        
+            list_of_files = [f for f in os.listdir(download_dir) if not f.endswith(('.crdownload', '.tmp'))]
+            if list_of_files:
+                latest_file = max([os.path.join(download_dir, f) for f in list_of_files], key=os.path.getctime)
+                downloaded_filename = os.path.basename(latest_file)
+                print(f"File berhasil diunduh: {downloaded_filename}")
+                edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}`")
+            else:
+                edit_telegram_message(initial_message_id, "❌ **Gagal menemukan file yang diunduh.**")
+                return None
+
     except Exception as e:
-        print(f"Gagal mengunduh file dengan Selenium: {e}")
-        edit_telegram_message(initial_message_id, f"❌ **GoFile: Terjadi kesalahan saat mengunduh.**\nDetail: {str(e)[:150]}...")
+        print(f"Gagal mengunduh file: {e}")
+        if initial_message_id:
+            edit_telegram_message(initial_message_id, f"❌ **Terjadi kesalahan saat mengunduh.**\nDetail: {str(e)[:150]}...")
+        downloaded_filename = None
+        
     finally:
         if driver:
             driver.quit()
