@@ -317,7 +317,7 @@ def download_file_with_aria2c(urls, name):
             time.sleep(1)
             process.kill()
 
-    return None
+    return name
 
 def downloader(url):
     """
