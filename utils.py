@@ -366,11 +366,12 @@ def downloader(url):
            
             driver.get(source_url(url))
             list_items = driver.find_elements(By.CSS_SELECTOR, "ul#mirrorList > li")
-            send_telegram_message(list_items.get_attribute("outerHTML"))
+            
             li_id = []
             for item in list_items:
                 item_id = item.get_attribute("id")
                 li_id.append(item_id)
+                send_telegram_message(list_id)
             driver.get(url)
             download_button = WebDriverWait(driver, 20).until(
                   EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
