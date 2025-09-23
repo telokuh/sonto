@@ -379,7 +379,9 @@ def downloader(url):
             download_button = WebDriverWait(driver, 20).until(
                   EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
-            aname = driver.find_elements(By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div").text
+            aname = WebDriverWait(driver, 10).until(
+                  EC.visibility_of_element_located((By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div"))
+            ).text
             ahref = download_button.get_attribute('href')
             download_url = []
             for arr in li_id:
