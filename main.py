@@ -37,7 +37,7 @@ def main_downloader(url):
         print("URL download with aria2c .")
         download_url_pixeldrain = get_download_url_from_pixeldrain_api(url)
         if download_url_pixeldrain:
-            downloaded_filename = download_file_with_aria2c(download_url_pixeldrain, message_id=initial_message_id)
+            downloaded_filename = download_file_with_aria2c(download_url_pixeldrain)
 
     elif "mediafire" in url or "gofile" in url or "sourceforge" in url:
         print("URL cocok dengan Gofile. Menggunakan Selenium...")
