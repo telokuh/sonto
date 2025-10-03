@@ -69,10 +69,10 @@ jobs:
     # Definisi Variabel Bantu (Sekarang hanya untuk URL download)
     env:
       PAYLOAD_URL: ${{ github.event.client_payload.url }}
-      # Ganti PAYLOAD_CHAT_ID menjadi sender_chat_id
-      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender_chat_id }} 
-      OWNER_ID: ${{ vars.OWNER_ID }} 
       
+      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender }} 
+      OWNER_ID: ${{ vars.OWNER_ID }} 
+      IS_OWNER_AUTH: ${{ github.event.client_payload.sender == vars.OWNER_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -175,8 +175,8 @@ jobs:
           # 1. Tentukan nama Secret Refresh Token
           OWNER_ID="${{ env.OWNER_ID }}"
           PAYLOAD_ID="${{ github.event.client_payload.sender }}"
-
-          if [ "$PAYLOAD_ID" == "$OWNER_ID" ]; then
+          
+          if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
               SECRET_NAME="DRIVE_REFRESH_TOKEN_OWNER"
           else
               SECRET_NAME="DRIVE_REFRESH_TOKEN_USER_${PAYLOAD_ID}"
