@@ -56,9 +56,9 @@ except Exception as e:
 # --- Ganti logika di bawah ini dengan kebutuhan upload Anda ---
 try:
     print(f"🚀 Memulai upload file: {DOWNLOADED_FILE}")
-    gfile = drive.CreateFile({'title': DOWNLOADED_FILE, 'mimeType': 'application/zip'})
+    gfile = drive.CreateFile({'title': DOWNLOADED_FILE, 'mimeType': 'application/octet-stream'})
     gfile.SetContentFile(DOWNLOADED_FILE)
-    gfile.Upload(resumable=True) 
+    gfile.Upload(param={'supportsTeamDrives': True}) 
     print(f"✅ Upload {DOWNLOADED_FILE} berhasil. ID: {gfile['id']}")
 except Exception as e:
     print(f"❌ Gagal saat upload file: {e}")
