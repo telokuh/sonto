@@ -4,7 +4,7 @@ import requests
 import threading
 from pyrogram import Client, filters
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request # <<< TAMBAH: request
+from flask import Flask, jsonify, request 
 
 # Muat variabel dari file .env
 load_dotenv()
@@ -18,13 +18,15 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 # Kredensial OAuth (Harus ada di .env)
 CLIENT_ID = os.environ.get("CLIENT_ID")
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
-REDIRECT_URI = os.environ.get("REDIRECT_URI") # URL publik bot Anda, mis: https://mybot.ngrok.io/oauth_callback
+# URL publik bot Anda, mis: https://mybot.ngrok.io/oauth_callback
+REDIRECT_URI = os.environ.get("REDIRECT_URI") 
 
 # Konfigurasi GitHub Repository
 GITHUB_REPO_OWNER = os.environ.get("GITHUB_REPO_OWNER") or "telokuh"
 GITHUB_REPO_NAME = os.environ.get("GITHUB_REPO_NAME") or "sonto"
-GITHUB_EVENT_AUTH_INIT = "new_url_received" # Event untuk memicu auth.sh
-GITHUB_EVENT_TOKEN_RECEIVED = "refresh_token_received" # Event dari Flask ke Actions
+GITHUB_EVENT_AUTH_INIT = "new_url_received" 
+GITHUB_EVENT_TOKEN_RECEIVED = "refresh_token_received" 
+SCOPE = "https://www.googleapis.com/auth/drive.readonly" # Scope OAuth
 
 # Inisialisasi bot Pyrogram
 pyrogram_app = Client(
@@ -39,13 +41,12 @@ flask_app = Flask(__name__)
 
 # --- Fungsi Bantu: Menjalankan Flask ---
 def run_flask():
-    # Pastikan Flask dapat mengakses request, jika dijalankan di main thread, ini aman
     flask_app.run(host="0.0.0.0", port=8000)
 
-# --- FUNGSI BANTUAN UNTUK MENGIRIM KE GITHUB ACTIONS ---
+# --- FUNGSI BANTUAN UNTUK MENGIRIM KE GITHUB ACTIONS (Hanya untuk URL Normal) ---
 async def send_to_github_actions(message, url_or_command_text, extra_payload=None):
     """
-    Mengirim event 'repository_dispatch' ke GitHub Actions.
+    Mengirim event 'repository_dispatch' ke GitHub Actions (Khusus untuk URL download).
     """
     
     headers = {
@@ -72,7 +73,7 @@ async def send_to_github_actions(message, url_or_command_text, extra_payload=Non
         )
 
         if response.status_code == 204:
-            await message.reply_text("📥 Memicu alur otorisasi di GitHub Actions...")
+            await message.reply_text("📥 Memicu alur download di GitHub Actions...")
         else:
             await message.reply_text(
                 f"❌ Gagal mengirim ke GitHub Actions. Status: {response.status_code}\nRespons: {response.text}"
@@ -81,7 +82,7 @@ async def send_to_github_actions(message, url_or_command_text, extra_payload=Non
         await message.reply_text(f"Terjadi kesalahan: {e}")
 
 
-# --- ENDPOINT FLASK BARU: OAUTH CALLBACK ---
+# --- ENDPOINT FLASK BARU: OAUTH CALLBACK (Tidak Berubah) ---
 @flask_app.route("/oauth_callback")
 def oauth_callback():
     auth_code = request.args.get('code')
@@ -122,7 +123,7 @@ def oauth_callback():
         "Authorization": f"token {GITHUB_TOKEN}", 
     }
     payload = {
-        "event_type": GITHUB_EVENT_TOKEN_RECEIVED, # Event untuk memicu job penyimpanan
+        "event_type": GITHUB_EVENT_TOKEN_RECEIVED, 
         "client_payload": {
             "refresh_token": refresh_token,
             "sender_chat_id": chat_id, 
@@ -139,12 +140,13 @@ def oauth_callback():
     if gh_response.status_code == 204:
         if chat_id:
             try:
-                # Menggunakan pyrogram_app.send_message harus berada di thread Pyrogram
-                # Untuk kesederhanaan, di sini kita cetak dan asumsikan user melihat balasan Flask.
-                # Jika bot Anda berjalan di mode async, ini perlu dijalankan dengan loop asyncio.
-                print(f"Token untuk chat {chat_id} berhasil dikirim ke Actions.")
+                # Mengirim pesan notifikasi sukses ke chat ID pengguna
+                pyrogram_app.send_message(
+                    chat_id=int(chat_id),
+                    text="✅ **Token Otorisasi Berhasil!** Refresh Token Anda sudah diterima dan sedang disimpan di GitHub Secrets."
+                )
             except Exception as e:
-                print(f"Gagal mengirim pesan ke chat ID {chat_id}: {e}")
+                print(f"Gagal mengirim pesan notifikasi ke chat ID {chat_id}: {e}")
         
         return "✅ Token Otorisasi Berhasil Diterima dan sedang diproses di GitHub Actions!", 200
     else:
@@ -156,21 +158,46 @@ def oauth_callback():
 def home():
     return jsonify({"status": " running!"})
 
-# --- HANDLER UNTUK PERINTAH /auth ---
+# --------------------------------------------------------------------------------------
+# --- HANDLER UTAMA BARU: /auth (TANPA auth.sh) ---
 @pyrogram_app.on_message(filters.command("auth") & filters.private & ~filters.me)
 async def handle_auth_command(client, message):
     user_id = str(message.from_user.id)
-    AUTH_COMMAND_TEXT = "auth" 
     
-    await message.reply_text("Perintah /auth diterima. Memulai proses otorisasi...")
-    
-    # Kirim event untuk memicu auth.sh (Hanya untuk mengirim URL)
-    await send_to_github_actions(
-        message, 
-        AUTH_COMMAND_TEXT, 
-        extra_payload={"chat_id": user_id} 
+    if not all([CLIENT_ID, REDIRECT_URI]):
+        await message.reply_text("❌ Otorisasi Gagal: Konfigurasi CLIENT_ID atau REDIRECT_URI belum lengkap di lingkungan bot.")
+        return
+
+    # 1. Rangkai URL Otorisasi Google di bot
+    AUTH_URL = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={CLIENT_ID}&"
+        f"redirect_uri={REDIRECT_URI}&"
+        f"scope={SCOPE}&"
+        f"response_type=code&"
+        f"access_type=offline&"
+        f"state={user_id}" # Menggunakan user_id sebagai 'state' untuk tracking
     )
-    
+
+    # 2. Buat Teks Pesan HTML
+    formatted_auth_url = (
+        f"<b>Perhatian! Klik link di bawah ini untuk Otorisasi:</b>\n\n"
+        f"<code>{AUTH_URL}</code>\n\n"
+        f"Anda akan dialihkan kembali ke server bot setelah otorisasi."
+    )
+
+    # 3. Kirim pesan
+    try:
+        await client.send_message(
+            chat_id=user_id,
+            text=formatted_auth_url,
+            parse_mode="html"
+        )
+        await message.reply_text("✅ Tautan otorisasi berhasil dikirim. Cek pesan terbaru Anda.")
+    except Exception as e:
+        await message.reply_text(f"❌ Gagal mengirim URL otorisasi: {e}")
+
+
 # --- HANDLER UNTUK PESAN BERISI URL ---
 @pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
 async def handle_url(client, message):
