@@ -337,7 +337,7 @@ def download_with_yt_dlp(url):
         
         if final_filename:
             print(f"Unduhan yt-dlp/aria2c selesai. File: {final_filename}")
-            edit_telegram_message(initial_message_id, f"✅ **Unduhan `yt-dlp/aria2c` selesai!**\nFile: `{final_filename}`")
+            edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`")
             return final_filename
         else:
             # Jika semua berhasil, tapi nama file gagal diambil
