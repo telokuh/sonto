@@ -89,22 +89,46 @@ def source_url(download_url):
         print(f"Terjadi kesalahan: {e}")
         return None
 
-def get_download_url_from_pixeldrain_api(url):
+def get_pixeldrain_info_and_download(url):
     """
-    Mengambil URL unduhan langsung dari API Pixeldrain.
+    Mengambil URL unduhan langsung dan nama file dari Pixeldrain API,
+    kemudian mengunduh file menggunakan aria2c.
     """
-    print("Memproses URL Pixeldrain menggunakan API...")
+    print(f"Menganalisis URL Pixeldrain: {url}")
+    initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari Pixeldrain...**\nMemperoleh detail file...")
+    
     try:
-        file_id = url.split('/')[-1]
-        download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
-        if "sourceforge" in url:
-            download_url = url
-        print(f"URL Unduhan Pixeldrain ditemukan: {download_url}")
-        return download_url
-    except Exception as e:
-        print(f"Gagal mendapatkan URL unduhan Pixeldrain: {e}")
-        return None
+        # 1. Mengambil File ID
+        file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
+        if not file_id_match:
+            raise ValueError("URL Pixeldrain tidak valid.")
+            
+        file_id = file_id_match.group(2)
+        api_url = f"https://pixeldrain.com/api/file/{file_id}"
+        download_url = f"{api_url}?download"
+        
+        # 2. Mendapatkan Nama File menggunakan API Info
+        info_response = requests.get(api_url, timeout=10).json()
+        if not info_response.get("success"):
+            raise Exception(f"API Pixeldrain gagal: {info_response.get('message', 'Tidak diketahui')}")
+            
+        filename = info_response['file']['name']
+        
+        edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`\nUkuran: `{human_readable_size(info_response['file']['size'])}`")
 
+        # 3. Memanggil aria2c dengan URL dan Nama File yang Benar
+        downloaded_filename = download_file_with_aria2c([download_url], filename)
+
+        if downloaded_filename:
+            edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}`")
+            return downloaded_filename
+        else:
+            raise Exception("Aria2c gagal mengunduh file Pixeldrain.")
+
+    except Exception as e:
+        print(f"Gagal mengunduh Pixeldrain: {e}")
+        edit_telegram_message(initial_message_id, f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {str(e)[:150]}...")
+        return None
 
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
@@ -457,8 +481,7 @@ def downloader(url):
             elif "mediafire" in url:
                 download_button_selector = "#downloadButton"
 
-            elif "pixeldrain" in url:
-                download_button_selector = "#body > div > div.file_preview_row.svelte-jngqwx > div.file_preview.svelte-jngqwx.checkers > div.block.svelte-40do4p > div > button"
+            
             else:
                 raise ValueError("URL tidak didukung oleh downloader ini.")
 
