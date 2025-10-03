@@ -9,7 +9,7 @@ CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 
 # File yang sudah didownload (misalnya, dari main.py)
-DOWNLOADED_FILE = "nama_file_yang_di_download.zip" # Ganti dengan logika penemuan file yang benar
+DOWNLOADED_FILE = os.environ.get('FILENAME') # Ganti dengan logika penemuan file yang benar
 
 if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
     print("❌ ERROR: Kredensial Google Drive tidak lengkap di environment.")
