@@ -26,7 +26,7 @@ GITHUB_REPO_OWNER = os.environ.get("GITHUB_REPO_OWNER") or "telokuh"
 GITHUB_REPO_NAME = os.environ.get("GITHUB_REPO_NAME") or "sonto"
 GITHUB_EVENT_AUTH_INIT = "new_url_received" 
 GITHUB_EVENT_TOKEN_RECEIVED = "refresh_token_received" 
-SCOPE = "https://www.googleapis.com/auth/drive.readonly" # Scope OAuth
+SCOPE = "https://www.googleapis.com/auth/drive" # Scope OAuth
 
 # Inisialisasi bot Pyrogram
 pyrogram_app = Client(
