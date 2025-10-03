@@ -168,7 +168,8 @@ jobs:
       - name: Uploader
         
         run: |
-          python upload.py
+          #python upload.py
+          ls 
         
         shell: bash
         env:
