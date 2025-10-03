@@ -44,7 +44,7 @@ DUMMY_EXPIRY="0001-01-01T00:00:00Z"
 cat << EOF > "$RCLONE_CONFIG_PATH"
 [${DRIVE_REMOTE_NAME}]
 type = drive
-scope = ${SCOPE}
+scope = drive
 client_id = ${CLIENT_ID}
 client_secret = ${CLIENT_SECRET}
 # Format token JSON lengkap: Ini memberi rclone instruksi untuk melakukan refresh.
