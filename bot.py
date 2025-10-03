@@ -80,20 +80,7 @@ async def send_to_github_actions(message, url_or_command_text, extra_payload=Non
     except Exception as e:
         await message.reply_text(f"Terjadi kesalahan: {e}")
 
-# --- HANDLER UNTUK PESAN BERISI URL ---
-@pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
-async def handle_url(client, message):
-    text = message.text
 
-    # Deteksi URL hanya jika teks mengandung "http"
-    if "http" in text:
-        url = text
-        await message.reply_text(f"URL terdeteksi: `{url}`\n")
-        # Kirim URL normal tanpa payload tambahan
-        await send_to_github_actions(message, url)
-    else:
-        # Jika bukan URL dan bukan perintah, abaikan (atau berikan balasan default)
-        pass 
 
 # --- HANDLER UNTUK PERINTAH /auth ---
 @pyrogram_app.on_message(filters.command("auth") & filters.private & ~filters.me)
@@ -109,6 +96,25 @@ async def handle_auth_command(client, message):
         AUTH_COMMAND_TEXT, 
         extra_payload={"chat_id": user_id}
     )
+     
+
+# --- HANDLER UNTUK PESAN BERISI URL ---
+@pyrogram_app.on_message(filters.text & filters.private & ~filters.me)
+async def handle_url(client, message):
+    text = message.text
+    if message.command: # Hentikan jika ini adalah perintah (misalnya /auth)
+        return
+    # Deteksi URL hanya jika teks mengandung "http"
+    if "http" in text:
+        url = text
+        await message.reply_text(f"URL terdeteksi: `{url}`\n")
+        # Kirim URL normal tanpa payload tambahan
+        await send_to_github_actions(message, url)
+    else:
+        # Jika bukan URL dan bukan perintah, abaikan (atau berikan balasan default)
+        pass 
+
+
 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
