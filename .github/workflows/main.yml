@@ -174,7 +174,7 @@ jobs:
         run: |
           # 1. Tentukan nama Secret Refresh Token
           OWNER_ID="${{ env.OWNER_ID }}"
-          PAYLOAD_ID="${{ env.PAYLOAD_CHAT_ID }}"
+          PAYLOAD_ID="${{ github.event.client_payload.sender }}"
 
           if [ "$PAYLOAD_ID" == "$OWNER_ID" ]; then
               SECRET_NAME="DRIVE_REFRESH_TOKEN_OWNER"
