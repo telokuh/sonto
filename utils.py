@@ -89,7 +89,7 @@ def source_url(download_url):
         print(f"Terjadi kesalahan: {e}")
         return None
 
-def get_pixeldrain_info_and_download(url):
+def pixeldrain(url):
     """
     Mengambil URL unduhan langsung dan nama file dari Pixeldrain API,
     kemudian mengunduh file menggunakan aria2c.
