@@ -272,26 +272,32 @@ def download_file_with_megatools(url):
             shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-def download_with_yt_dlp(url, message_id=None):
-    print("Mencoba mengunduh file dengan yt-dlp...")
-    initial_message_id = send_telegram_message("⏳ **Memulai unduhan dengan `yt-dlp`...**")
+
+def download_with_yt_dlp(url):
+    """
+    Mengunduh file menggunakan yt-dlp dengan aria2c sebagai backend unduhan 
+    untuk kecepatan maksimum, dan mengambil nama file yang sudah selesai.
+    """
+    print(f"Mencoba mengunduh {url} dengan yt-dlp menggunakan aria2c backend...")
+    initial_message_id = send_telegram_message("⏳ **Memulai unduhan (yt-dlp + aria2c)...**\nMemeriksa URL...")
     
     final_filename = None
-    
-    # Template output: mencetak nama file yang sudah selesai di baris terakhir
-    FILENAME_PRINT_FLAG = '--print'
-    FILENAME_PRINT_TEMPLATE = 'after_move:filepath' # Ini yang paling akurat!
 
     command = [
         'yt-dlp', 
-        '--newline', 
-        '--progress',
-        # Progress template hanya untuk progress bar
-        '--progress-template', '%(progress._percent_str)s',
         '--no-warnings', 
         '--rm-cache-dir',
-        # Flag untuk mencetak nama file setelah unduhan/move selesai
-        FILENAME_PRINT_FLAG, FILENAME_PRINT_TEMPLATE,
+        
+        # Menggunakan aria2c sebagai downloader eksternal
+        '--external-downloader', 'aria2c',
+        
+        # Konfigurasi aria2c: 16 koneksi/utas per file untuk kecepatan
+        '--external-downloader-args', '-x16 -s16 -k1M',
+        
+        # Mencetak jalur file yang sudah selesai ke stdout untuk pengambilan nama
+        '--print', 'after_move:filepath',
+        
+        # Template output default
         '--output', '%(title)s.%(ext)s', 
         url
     ]
@@ -301,53 +307,48 @@ def download_with_yt_dlp(url, message_id=None):
         command.extend(['--cookies', cookies_file])
 
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
-        last_percent = -1
-
-        while True:
-            line = process.stdout.readline()
-            if not line: 
-                break
-            
-            stripped_line = line.strip()
-
-            # 1. Menangani pembaruan progress
-            if stripped_line.endswith('%') and ' ' not in stripped_line:
-                try:
-                    current_percent = int(float(stripped_line.replace('%', '')))
-                    if current_percent > last_percent + 5 or current_percent == 100:
-                        message = f"⬇️ **Mengunduh...**\n`{url}`\n\nProgres: `{current_percent}%`"
-                        edit_telegram_message(initial_message_id, message)
-                        last_percent = current_percent
-                except ValueError: 
-                    continue
-            
-            # 2. Menangkap nama file
-            # Baris nama file adalah satu-satunya baris non-kosong yang TIDAK diakhiri dengan %
-            elif stripped_line:
-                final_filename = stripped_line
-                print(f"Nama file yt-dlp ditemukan: {final_filename}")
-
-
-        process.wait()
+        # Popen dengan stderr digabungkan ke stdout untuk pengambilan output yang lebih mudah
+        process = subprocess.Popen(
+            command, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.STDOUT, 
+            text=True
+        )
+        
+        # Karena aria2c yang menangani progress, kita tidak bisa mem-parsing progress 
+        # dengan mudah. Kita hanya akan menunggu proses selesai.
+        edit_telegram_message(initial_message_id, f"⬇️ **Mengunduh (yt-dlp + aria2c)...**\n\nSedang mengunduh file `{url}`...")
+        
+        # Menunggu proses selesai dan menangkap semua output
+        stdout_output, _ = process.communicate() 
         
         if process.returncode != 0:
-            # Baca output error jika proses gagal
-            stderr_output = process.stderr.read() if process.stderr else "Tidak ada detail error."
-            raise Exception(f"yt-dlp gagal mengunduh file. Output error: {stderr_output[:100]}...")
+            raise Exception(f"yt-dlp (dengan aria2c) gagal mengunduh. Output: {stdout_output[:500]}")
             
-        print("Unduhan yt-dlp selesai.")
+        # Mencari nama file dari output
+        # Nama file dicetak oleh flag --print after_move:filepath
+        for line in stdout_output.splitlines():
+            stripped_line = line.strip()
+            # Kita mencari baris tunggal yang bukan pesan status/progress
+            # dan mengandung titik (seperti ekstensi file)
+            if stripped_line and '.' in stripped_line and not stripped_line.startswith('['):
+                final_filename = stripped_line
+                break # Kita asumsikan yang pertama adalah nama file final
         
         if final_filename:
-            edit_telegram_message(initial_message_id, f"✅ **Unduhan `yt-dlp` selesai!**\nFile: `{final_filename}`")
+            print(f"Unduhan yt-dlp/aria2c selesai. File: {final_filename}")
+            edit_telegram_message(initial_message_id, f"✅ **Unduhan `yt-dlp/aria2c` selesai!**\nFile: `{final_filename}`")
             return final_filename
         else:
-            # Kasus ini seharusnya tidak terjadi dengan after_move:filepath
+            # Jika semua berhasil, tapi nama file gagal diambil
             raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file dari output.")
 
     except Exception as e:
-        print(f"yt-dlp gagal: {e}")
-        send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {str(e)[:150]}...")
+        error_message = str(e)
+        print(f"yt-dlp gagal: {error_message}")
+        
+        # Kirim notifikasi kegagalan
+        send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {error_message[:150]}...")
         return None
 
 
