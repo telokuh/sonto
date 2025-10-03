@@ -56,7 +56,7 @@ TOKEN_JSON="{\"access_token\":\"\",\"token_type\":\"Bearer\",\"refresh_token\":\
 
 
 cat << EOF > "$RCLONE_CONFIG_PATH"
-[${DRIVE_REMOTE_NAME}]
+[gdrive]
 type = drive
 client_id = "${CLIENT_ID}" 
 client_secret = "${CLIENT_SECRET}" 
@@ -68,7 +68,7 @@ echo "✅ Konfigurasi rclone berhasil dibuat."
 # =========================================================
 # 4. UPLOAD FILE MENGGUNAKAN RCLONE
 # =========================================================
-rclone config reconnect gdrive{5yYjZ}:
+rclone config reconnect gdrive:
 echo "🚀 Memulai proses upload ke Google Drive di folder: ${DRIVE_UPLOAD_FOLDER}"
 
 # Gunakan flag --drive-scope untuk mengatasi masalah root directory (opsional tapi aman)
