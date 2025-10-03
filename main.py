@@ -6,7 +6,7 @@ from utils import (
     download_with_yt_dlp,
     download_file_with_aria2c,
     download_file_with_megatools,
-    get_download_url_from_pixeldrain_api,
+    pixeldrain,
     downloader
 )
 
@@ -32,7 +32,7 @@ def main_downloader(url):
         send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
         downloaded_filename = download_file_with_megatools(url)
     elif "pixeldrain" in url:
-        downloaded_filename = get_download_url_from_pixeldrain_api(url)
+        downloaded_filename = pixeldrain(url)
     elif "mediafire" in url or "gofile" in url:
         print(" Menggunakan Selenium...")
         downloaded_filename = downloader(url)
