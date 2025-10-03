@@ -39,15 +39,18 @@ echo "Membuat konfigurasi rclone sementara..."
 RCLONE_CONFIG_PATH="$HOME/.config/rclone/rclone.conf"
 mkdir -p "$HOME/.config/rclone"
 
+DUMMY_EXPIRY="0001-01-01T00:00:00Z"
+
 cat << EOF > "$RCLONE_CONFIG_PATH"
 [${DRIVE_REMOTE_NAME}]
 type = drive
-scope = https://www.googleapis.com/auth/drive.readonly # Gunakan scope yang sesuai
+scope = ${SCOPE}
 client_id = ${CLIENT_ID}
 client_secret = ${CLIENT_SECRET}
-# Perbaikan: Gunakan parameter refresh_token secara eksplisit
-refresh_token = ${REFRESH_TOKEN} 
-# Kita tidak perlu lagi menyertakan blok "token" JSON yang kompleks
+# Format token JSON lengkap: Ini memberi rclone instruksi untuk melakukan refresh.
+token = {"access_token":"","token_type":"Bearer","refresh_token":"${REFRESH_TOKEN}","expiry":"${DUMMY_EXPIRY}"}
+team_drive = 
+root_folder_id = 
 EOF
 
 echo "✅ Konfigurasi rclone berhasil dibuat."
