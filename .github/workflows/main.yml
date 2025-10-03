@@ -197,7 +197,7 @@ jobs:
         env:
           # Pastikan Anda punya GH_PAT, GOOGLE_CLIENT_ID, dan GOOGLE_CLIENT_SECRET di secrets
           GH_TOKEN: ${{ vars.GH_PAT }} 
-          DRIVE_REFRESH_TOKEN: ${{ vars[steps.uploader.outputs.token_secret_name] }}
+          DRIVE_REFRESH_TOKEN: ${{ vars.DRIVE_REFRESH_TOKEN_OWNER }}
           GOOGLE_CLIENT_ID: ${{ vars.CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
           FILENAME: ${{ steps.get_filename.outputs.file_name }}
