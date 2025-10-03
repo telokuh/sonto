@@ -89,14 +89,15 @@ def source_url(download_url):
         print(f"Terjadi kesalahan: {e}")
         return None
 
-def pixeldrain(url):
+def pixeldrain(url, max_retries=3):
     """
     Mengambil URL unduhan langsung dan nama file dari Pixeldrain API,
-    kemudian mengunduh file menggunakan aria2c.
+    kemudian mengunduh file menggunakan aria2c dengan mekanisme retry.
     """
     print(f"Menganalisis URL Pixeldrain: {url}")
     initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari Pixeldrain...**\nMemperoleh detail file...")
     
+    file_id = None
     try:
         # 1. Mengambil File ID
         file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
@@ -107,14 +108,35 @@ def pixeldrain(url):
         api_url = f"https://pixeldrain.com/api/file/{file_id}"
         download_url = f"{api_url}?download"
         
-        # 2. Mendapatkan Nama File menggunakan API Info
-        info_response = requests.get(api_url, timeout=10).json()
-        if not info_response.get("success"):
-            raise Exception(f"API Pixeldrain gagal: {info_response.get('message', 'Tidak diketahui')}")
-            
-        filename = info_response['file']['name']
+        # 2. Mendapatkan Nama File menggunakan API Info dengan Retry
+        for attempt in range(max_retries):
+            try:
+                edit_telegram_message(initial_message_id, f"⏳ **Memperoleh detail...**\nPercobaan ke-{attempt + 1}/{max_retries}.")
+                # Coba ambil info dalam 15 detik (ditingkatkan dari 10 detik default)
+                info_response = requests.get(api_url, timeout=15).json() 
+                
+                if not info_response.get("success"):
+                    raise Exception(f"API Pixeldrain gagal: {info_response.get('message', 'Tidak diketahui')}")
+                
+                # Jika berhasil, keluar dari loop retry
+                break 
+                
+            except requests.exceptions.Timeout:
+                print(f"Percobaan {attempt + 1} gagal: Read timed out. Mencoba lagi...")
+                if attempt == max_retries - 1:
+                    raise requests.exceptions.Timeout("Gagal setelah semua percobaan.")
+                time.sleep(2 * (attempt + 1)) # Tunggu lebih lama setiap kali
+            except requests.exceptions.RequestException as e:
+                print(f"Percobaan {attempt + 1} gagal: Kesalahan koneksi ({e}). Mencoba lagi...")
+                if attempt == max_retries - 1:
+                    raise requests.exceptions.RequestException(f"Gagal setelah semua percobaan. Detail: {e}")
+                time.sleep(2 * (attempt + 1))
         
-        edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`\nUkuran: `{human_readable_size(info_response['file']['size'])}`")
+        # Lanjutkan jika berhasil mendapatkan respons
+        filename = info_response['file']['name']
+        file_size = info_response['file']['size']
+        
+        edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`\nUkuran: `{human_readable_size(file_size)}`")
 
         # 3. Memanggil aria2c dengan URL dan Nama File yang Benar
         downloaded_filename = download_file_with_aria2c([download_url], filename)
@@ -127,9 +149,9 @@ def pixeldrain(url):
 
     except Exception as e:
         print(f"Gagal mengunduh Pixeldrain: {e}")
-        edit_telegram_message(initial_message_id, f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {str(e)[:150]}...")
+        error_message = f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {str(e)[:150]}..."
+        edit_telegram_message(initial_message_id, error_message)
         return None
-
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
