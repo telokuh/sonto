@@ -33,7 +33,7 @@ def main_downloader(url):
         downloaded_filename = download_file_with_megatools(url)
     
     elif "mediafire" in url or "gofile" in url or "pixeldrain" in url:
-        print("URL cocok dengan Gofile. Menggunakan Selenium...")
+        print(" Menggunakan Selenium...")
         downloaded_filename = downloader(url)
         
 
