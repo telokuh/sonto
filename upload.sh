@@ -1,28 +1,23 @@
 #!/bin/bash
 
 # upload_drive.sh
-# Skrip ini mengunggah file yang diunduh ke Google Drive menggunakan rclone.
 
 # =========================================================
 # 1. KONFIGURASI LOKAL DAN KREDENSIAL
 # =========================================================
 
-# Ambil Refresh Token yang disuntikkan dari GitHub Secrets (harus disetel di workflow)
-# NOTE: Nama variabel harus sesuai dengan nama yang Anda set di workflow.
+# Ambil variabel yang disuntikkan dari main.yml
 REFRESH_TOKEN="$DRIVE_REFRESH_TOKEN"
 CLIENT_ID="$GOOGLE_CLIENT_ID"
 CLIENT_SECRET="$GOOGLE_CLIENT_SECRET"
 
-# Direktori Google Drive tujuan
 DRIVE_REMOTE_NAME="gdrive"
-DRIVE_UPLOAD_FOLDER="/TheGdriveXbot" # Folder unik per hari di Drive
+DRIVE_UPLOAD_FOLDER="/uploads_bot_$(date +%Y%m%d)" 
 
-# File yang akan diunggah (Asumsikan sudah didownload dan namanya diketahui)
-# Anda harus mengganti 'downloaded_filename.txt' dengan file yang benar.
-DOWNLOADED_FILE=$FILENAME 
+DOWNLOADED_FILE=$(cat downloaded_filename.txt) 
 
 if [ -z "$REFRESH_TOKEN" ]; then
-    echo "❌ ERROR: DRIVE_REFRESH_TOKEN tidak ditemukan. Otorisasi Gagal."
+    echo "❌ ERROR: DRIVE_REFRESH_TOKEN tidak ditemukan. Upload dibatalkan."
     exit 1
 fi
 
@@ -32,48 +27,58 @@ if [ ! -f "$DOWNLOADED_FILE" ]; then
 fi
 
 # =========================================================
-# 2. BUAT KONFIGURASI RCLONE SEMENTARA
+# 2. PEMBESIHAN REFRESH TOKEN
+# =========================================================
+
+# PENTING: Hapus semua line break dan spasi di awal/akhir
+CLEAN_REFRESH_TOKEN=$(echo "$REFRESH_TOKEN" | tr -d '\n' | xargs)
+
+if [ -z "$CLEAN_REFRESH_TOKEN" ]; then
+    echo "❌ ERROR: Refresh Token kosong setelah dibersihkan. Cek penyaluran Secret di main.yml."
+    exit 1
+fi
+
+echo "✅ Refresh Token berhasil dibersihkan dan siap digunakan."
+
+# =========================================================
+# 3. BUAT KONFIGURASI RCLONE SEMENTARA (FORMAT TERBAIK)
 # =========================================================
 
 echo "Membuat konfigurasi rclone sementara..."
 RCLONE_CONFIG_PATH="$HOME/.config/rclone/rclone.conf"
 mkdir -p "$HOME/.config/rclone"
 
+# WAKTU KEDALUWARSA DUMMY
 DUMMY_EXPIRY="0001-01-01T00:00:00Z"
+
+# Format token JSON penuh: Pastikan Refresh Token yang digunakan adalah yang sudah dibersihkan.
+TOKEN_JSON="{\"access_token\":\"\",\"token_type\":\"Bearer\",\"refresh_token\":\"${CLEAN_REFRESH_TOKEN}\",\"expiry\":\"${DUMMY_EXPIRY}\"}"
+
 
 cat << EOF > "$RCLONE_CONFIG_PATH"
 [${DRIVE_REMOTE_NAME}]
 type = drive
-scope = drive
-client_id = ${CLIENT_ID}
-client_secret = ${CLIENT_SECRET}
-# Format token JSON lengkap: Ini memberi rclone instruksi untuk melakukan refresh.
-token = {"access_token":"","token_type":"Bearer","refresh_token":"${REFRESH_TOKEN}","expiry":"${DUMMY_EXPIRY}"}
-team_drive = 
-root_folder_id = 
+client_id = "${CLIENT_ID}" 
+client_secret = "${CLIENT_SECRET}" 
+token = ${TOKEN_JSON} 
 EOF
 
 echo "✅ Konfigurasi rclone berhasil dibuat."
 
 # =========================================================
-# 3. UPLOAD FILE MENGGUNAKAN RCLONE
+# 4. UPLOAD FILE MENGGUNAKAN RCLONE
 # =========================================================
 
 echo "🚀 Memulai proses upload ke Google Drive di folder: ${DRIVE_UPLOAD_FOLDER}"
 
-# Buat folder tujuan di Drive (rclone mkdir)
-rclone mkdir "${DRIVE_REMOTE_NAME}:${DRIVE_UPLOAD_FOLDER}"
+# Gunakan flag --drive-scope untuk mengatasi masalah root directory (opsional tapi aman)
+rclone mkdir "${DRIVE_REMOTE_NAME}:${DRIVE_UPLOAD_FOLDER}" --drive-scope drive
 
-# Upload file
 rclone_output=$(rclone copy "$DOWNLOADED_FILE" "${DRIVE_REMOTE_NAME}:${DRIVE_UPLOAD_FOLDER}" -v --stats 1s 2>&1)
 
 if [ $? -eq 0 ]; then
     echo "✅ Upload berhasil!"
-    echo "------------------------------------------------------"
-    # Anda bisa mencari link di output rclone untuk dikirim kembali ke Telegram
-    echo "Log Rclone:"
-    echo "$rclone_output"
-    echo "------------------------------------------------------"
+    # ... (log output) ...
 else
     echo "❌ Upload GAGAL. Cek log di atas untuk detail rclone."
     exit 1
