@@ -35,7 +35,7 @@ flask_app = Flask(__name__)
 # Endpoint untuk mengecek status server
 @flask_app.route("/")
 def home():
-    return jsonify({"status": "Bot is running!"})
+    return jsonify({"status": " running!"})
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
@@ -47,7 +47,7 @@ async def handle_url(client, message):
     # Deteksi URL hanya jika teks mengandung "http"
     if "http" in text:
         url = text
-        await message.reply_text(f"URL terdeteksi: `{url}`\nMeneruskan ke GitHub Actions...")
+        await message.reply_text(f"URL terdeteksi: `{url}`\n")
 
         headers = {
             "Accept": "application/vnd.github.v3+json",
