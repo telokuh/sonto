@@ -41,7 +41,7 @@ def main_downloader(url):
     else:
         # Coba yt-dlp sebagai opsi universal
         print("URL tidak cocok dengan pola khusus. Mencoba dengan yt-dlp...")
-        yt_dlp_success = download_with_yt_dlp(url, message_id=initial_message_id)
+        yt_dlp_success = download_with_yt_dlp(url)
         if yt_dlp_success:
             downloaded_filename = yt_dlp_success
         else:
