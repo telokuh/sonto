@@ -63,9 +63,8 @@ AUTH_CODE=""
 LAST_UPDATE_ID=0
 TIMEOUT_SECS=300 # Timeout 5 menit
 START_TIME=$(date +%s)
-FOUND_CODE=0 # <--- VARIABEL KONTROL GLOBAL
 
-while [ "$FOUND_CODE" -eq 0 ]; do
+while [ -z "$AUTH_CODE" ]; do
     CURRENT_TIME=$(date +%s)
     ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
 
@@ -74,61 +73,53 @@ while [ "$FOUND_CODE" -eq 0 ]; do
         exit 1
     fi
     
-    # Dapatkan pembaruan baru (Long Polling)
+    # Long Polling: Tunggu hingga ada update (max 30s)
     UPDATES=$(curl -s --max-time 40 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30")
 
-    # Cek pesan terbaru
-    NEW_MESSAGES=$(echo "$UPDATES" | jq -c '.result[] | select(.message)')
+    # Ambil update ID terbesar untuk iterasi berikutnya
+    MAX_UPDATE_ID=$(echo "$UPDATES" | jq '[.result[].update_id] | max // 0')
 
-    if [ -n "$NEW_MESSAGES" ]; then
+    # --- KODE KRITIS: MEMPROSES PESAN DI SUB-SHELL DAN MENGAMBIL OUTPUTNYA ---
+    
+    # Jalankan proses pencarian kode di sub-shell. Jika kode ditemukan, kode tersebut akan dicetak.
+    FOUND_CODE_OUTPUT=$(echo "$UPDATES" | jq -r --arg chat_id "${TG_CHAT_ID}" '
+        .result[] 
+        | select(.message.chat.id | tostring == $chat_id) 
+        | .message.text // ""
+    ' | grep -oE '^[48]\/.*' | tail -n 1)
+
+    # Cek apakah sub-shell berhasil menemukan kode
+    if [ -n "$FOUND_CODE_OUTPUT" ]; then
+        AUTH_CODE="$FOUND_CODE_OUTPUT"
         
-        # Ambil pembaruan terakhir dan perbarui offset untuk iterasi berikutnya
-        LAST_UPDATE_ID=$(echo "$UPDATES" | jq '[.result[].update_id] | max + 1')
-
-        # Iterasi melalui semua pesan baru yang ada
-        echo "$NEW_MESSAGES" | while read -r MESSAGE_JSON; do
-            CHAT_ID=$(echo "$MESSAGE_JSON" | jq -r '.message.chat.id')
-            MESSAGE_TEXT=$(echo "$MESSAGE_JSON" | jq -r '.message.text // empty')
-
-            if [ "$CHAT_ID" = "$TG_CHAT_ID" ]; then
-                if [[ "$MESSAGE_TEXT" =~ ^[48]\/.* ]]; then
-                    # Kode ditemukan! Simpan nilai, set global flag, dan keluar dari sub-shell
-                    AUTH_CODE="$MESSAGE_TEXT"
-                    echo "✅ Kode otorisasi diterima!"
-                    FOUND_CODE=1 # <--- Set flag global (meskipun di sub-shell, kita tetap menggunakannya)
-                    
-                    # Kita harus keluar dari sub-shell ini, bukan loop utama
-                    exit 0 
-                fi
-            fi
-        done
-        
-        # *** PENAMBAHAN KRITIS ***
-        # Karena kita exit 0 dari sub-shell, kita perlu menangkap exit code-nya
-        if [ $? -eq 0 ] && [ "$FOUND_CODE" -eq 1 ]; then
-            # Jika sub-shell berhasil keluar dan kode ditemukan, kita break loop utama
-            break
+        # Hentikan loop utama (break) dan perbarui offset
+        if [ "$MAX_UPDATE_ID" -gt "$LAST_UPDATE_ID" ]; then
+             LAST_UPDATE_ID="$MAX_UPDATE_ID"
         fi
-
-        # Karena kita tidak bisa mengakses AUTH_CODE yang di set di sub-shell,
-        # kita perlu mengandalkan LAST_UPDATE_ID untuk mencegah pemrosesan ulang
-        # dan melanjutkan iterasi hingga kondisi 'break' terpenuhi.
+        echo "✅ Kode otorisasi diterima!"
+        break # <--- KELUAR DARI LOOP UTAMA
     fi
+    
+    # Perbarui offset jika ada update yang ditemukan (bahkan jika bukan kode)
+    if [ "$MAX_UPDATE_ID" -gt "$LAST_UPDATE_ID" ]; then
+        LAST_UPDATE_ID="$MAX_UPDATE_ID"
+    fi
+
 done
 
-# Setelah loop berhenti, kita harus mengatur AUTH_CODE dari UPDATES (jika masih kosong)
-# Ini adalah langkah pengamanan untuk skrip yang dijalankan di sub-shell.
-if [ -z "$AUTH_CODE" ]; then
-    AUTH_CODE=$(echo "$UPDATES" | jq -r --arg chat_id "${TG_CHAT_ID}" '.result[] | select(.message.chat.id | tostring == $chat_id) | .message.text' | grep -oE '^[48]\/.*' | tail -n 1)
-fi
-
 # --- LANJUTKAN KE LANGKAH 4 (TUKAR KODE) ---
+
 if [ -z "$AUTH_CODE" ]; then
-    echo "❌ Gagal mendapatkan AUTH_CODE di luar loop. Mengakhiri skrip."
+    echo "❌ Terjadi kegagalan internal saat menyimpan kode. Mengakhiri skrip."
     exit 1
 fi
 
-echo "Kode yang akan digunakan: $AUTH_CODE" 
+echo "----------------------------------------------------------------------"
+echo "Kode yang akan digunakan untuk penukaran: $AUTH_CODE"
+echo "----------------------------------------------------------------------"
+
+# ... (Lanjutkan dengan Langkah 4: TUKAR KODE UNTUK TOKEN)
+
 
 # --- 4. TUKAR KODE UNTUK TOKEN ---
 
