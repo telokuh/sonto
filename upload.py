@@ -36,7 +36,7 @@ if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
     sys.exit(1)
 
 # Folder Drive Tujuan (Buat folder unik per hari)
-DRIVE_UPLOAD_FOLDER_NAME = "" 
+DRIVE_UPLOAD_FOLDER_NAME = "my-drive" 
 
 
 # =========================================================
