@@ -36,7 +36,7 @@ if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
     sys.exit(1)
 
 # Folder Drive Tujuan (Buat folder unik per hari)
-DRIVE_UPLOAD_FOLDER_NAME = f"uploads_bot_{time.strftime('%Y%m%d')}" 
+DRIVE_UPLOAD_FOLDER_NAME = "" 
 
 
 # =========================================================
