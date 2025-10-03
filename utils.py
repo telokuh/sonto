@@ -89,13 +89,8 @@ def source_url(download_url):
         print(f"Terjadi kesalahan: {e}")
         return None
 
-import os
-import requests
-import re
-from urllib.parse import urlparse
-# ... (impor dan fungsi lain tetap sama) ...
 
-def get_pixeldrain_info_and_download(url):
+def pixeldrain(url):
     """
     Mengambil URL unduhan langsung dari Pixeldrain API,
     menggunakan requests.head() untuk mendapatkan nama file dan ukuran,
