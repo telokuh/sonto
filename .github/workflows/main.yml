@@ -201,6 +201,7 @@ jobs:
           DRIVE_REFRESH_TOKEN: ${{ secrets.DRIVE_REFRESH_TOKEN_OWNER }} # Akan di-override di step ini
           GOOGLE_CLIENT_ID: ${{ vars.CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
+          FILENAME: ${{ steps.get_filename.outputs.file_name }}
           
 
       - name: Clean up apt cache
