@@ -74,7 +74,7 @@ while [ -z "$AUTH_CODE" ]; do
         echo "❌ Timeout tercapai. Tidak ada kode otorisasi yang diterima dalam $TIMEOUT_SECS detik."
         exit 1
     fi
-    
+    echo "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30"
     # Dapatkan pembaruan baru. Gunakan timeout curl untuk memblokir hingga ada pesan baru (long polling)
     # Gunakan 'timeout=30' untuk long-polling yang andal
     UPDATES=$(curl -s --max-time 40 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30")
