@@ -47,7 +47,7 @@ async def handle_url(client, message):
     # Deteksi URL hanya jika teks mengandung "http"
     if "http" in text:
         url = text
-        await message.reply_text(f"URL terdeteksi: {url}\nMeneruskan ke GitHub Actions...")
+        await message.reply_text(f"URL terdeteksi: `{url}`\nMeneruskan ke GitHub Actions...")
 
         headers = {
             "Accept": "application/vnd.github.v3+json",
