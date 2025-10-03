@@ -20,35 +20,7 @@ from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
-def name(url):
-    """
-    Mencoba mendapatkan nama file dari Content-Disposition header.
-    Jika tidak ada, menggunakan bagian akhir path URL.
-    """
-    try:
-        # Gunakan HEAD request untuk meminimalkan transfer data
-        with requests.head(url, allow_redirects=True, timeout=10) as response:
-            # 1. Coba dapatkan dari header Content-Disposition
-            if 'Content-Disposition' in response.headers:
-                cd = response.headers.get('Content-Disposition')
-                # Logika sederhana untuk mengekstrak nama file
-                filename = cd.split('filename=')[-1].strip('"\' ')
-                if filename:
-                    return filename
-            
-            # 2. Jika tidak ada header, ambil dari path URL
-            parsed_url = urlparse(url)
-            filename = os.path.basename(parsed_url.path)
-            
-            # 3. Berikan nama default jika path kosong
-            if filename:
-                return filename
-            else:
-                return 'downloaded_file' # Nama default cadangan
 
-    except requests.exceptions.RequestException as e:
-        print(f"Peringatan: Gagal mendapatkan nama file dari URL {url}. Menggunakan nama default. Error: {e}")
-        return 'downloaded_file_error'
 
 def set_url(url, param_name, param_value):
     """Mengganti nilai parameter URL tertentu."""
@@ -128,7 +100,7 @@ def get_download_url_from_pixeldrain_api(url):
         if "sourceforge" in url:
             download_url = url
         print(f"URL Unduhan Pixeldrain ditemukan: {download_url}")
-        return [download_url]
+        return download_url
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan Pixeldrain: {e}")
         return None
@@ -332,6 +304,78 @@ def get_total_file_size_safe(url):
     
     return None
 
+def download_file_with_aria2c(urls, output_filename):
+    """
+    Mengunduh file menggunakan aria2c. Menghentikan proses
+    setelah file mencapai ukuran penuh yang diharapkan.
+    """
+    print(f"Memulai unduhan {output_filename} dengan aria2c.")
+
+    total_size = None 
+    command = [
+        'aria2c', '--allow-overwrite', '--file-allocation=none',
+        '--console-log-level=warn', '--summary-interval=0',
+        '-x', '16', '-s', '16', '-c',
+        '--async-dns=false', '--log-level=warn', '--continue',
+        '--input-file', '-',
+        '-o', output_filename
+    ]
+
+    process = None
+    aria2_temp_file = output_filename + '.aria2'
+
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        
+        for url in urls:
+            total_size = get_total_file_size_safe(url)
+            if total_size is not None:
+               process.stdin.write(url + '\n')
+               break
+
+            
+        process.stdin.close()
+        
+        start_time = time.time()
+        timeout = 300
+        
+        while time.time() - start_time < timeout:
+            if os.path.exists(output_filename):
+                current_size = os.path.getsize(output_filename)
+                
+                # Kondisi yang disempurnakan
+                if (total_size is not None and current_size >= total_size) or not os.path.exists(aria2_temp_file):
+                    print(f"File {output_filename} selesai. Menghentikan aria2c...")
+                    process.terminate()
+                    time.sleep(1)
+                    if process.poll() is None:
+                        process.kill()
+                    return output_filename
+            
+            if process.poll() is not None:
+                if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
+                    return output_filename
+                
+                print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
+                return None
+            
+            time.sleep(2)
+
+        print("Waktu habis. Menghentikan aria2c.")
+        if process and process.poll() is None:
+            process.terminate()
+            time.sleep(1)
+            process.kill()
+
+    except Exception as e:
+        print(f"Terjadi kesalahan saat menjalankan aria2c: {e}")
+        if process and process.poll() is None:
+            process.terminate()
+            time.sleep(1)
+            process.kill()
+
+    return None
+
 def downloader(url):
     """
     Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium
@@ -412,6 +456,9 @@ def downloader(url):
                 download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
             elif "mediafire" in url:
                 download_button_selector = "#downloadButton"
+
+            elif "pixeldrain" in url:
+                download_button_selector = "#body > div > div.file_preview_row.svelte-jngqwx > div.file_preview.svelte-jngqwx.checkers > div.block.svelte-40do4p > div > button"
             else:
                 raise ValueError("URL tidak didukung oleh downloader ini.")
 
@@ -457,136 +504,3 @@ def downloader(url):
         if driver:
             driver.quit()
         return downloaded_filename
-
-
-def download_file_with_aria2c(urls, output_filename=None):
-    """
-    Mengunduh file menggunakan aria2c. Menghentikan proses
-    setelah file mencapai ukuran penuh yang diharapkan.
-    Secara opsional menentukan nama file dari URL jika output_filename adalah None.
-    """
-    
-    # Inisialisasi awal
-    total_size = None
-    url_to_use = None
-    
-    # === Logika Penentuan Nama File Otomatis ===
-    if output_filename is None:
-        print("output_filename tidak ditentukan. Mencoba mendapatkan nama file dan ukuran dari URL.")
-        
-        for url in urls:
-            # Validasi dasar URL (seperti 'http://' atau 'https://')
-            if not url.startswith(('http://', 'https://')):
-                continue
-
-            # Coba dapatkan ukuran file
-            total_size = get_total_file_size_safe(url)
-            if total_size is not None:
-                # Jika ukuran berhasil didapatkan, tentukan nama file
-                determined_filename = name(url)
-                
-                # Gunakan nama file yang ditentukan jika valid
-                if determined_filename and determined_filename not in ('downloaded_file_error', 'downloaded_file'):
-                    output_filename = determined_filename
-                    url_to_use = url # Simpan URL ini
-                    print(f"Nama file yang ditentukan: {output_filename}")
-                    break
-                
-                # Jika nama gagal ditentukan secara spesifik
-                elif determined_filename == 'downloaded_file_error' or determined_filename == 'downloaded_file':
-                     output_filename = determined_filename
-                     url_to_use = url # Simpan URL ini
-                     print(f"Peringatan: Menggunakan nama file default '{output_filename}' karena penentuan nama gagal.")
-                     break
-            
-            # Jika total_size adalah None, coba URL berikutnya
-            total_size = None 
-
-    # === Fallback dan Finalisasi Nama File ===
-    # Fallback terakhir jika semua penentuan nama file gagal. Ini mencegah error NoneType!
-    if output_filename is None:
-         output_filename = 'default_aria2_download'
-         print(f"Peringatan: Gagal menentukan nama file yang valid. Menggunakan nama default: {output_filename}")
-    
-    # Jika output_filename sudah diberikan, kita tetap perlu menentukan total_size dan url_to_use
-    if total_size is None and url_to_use is None:
-         for url in urls:
-            if not url.startswith(('http://', 'https://')):
-                continue
-            total_size = get_total_file_size_safe(url)
-            if total_size is not None:
-                url_to_use = url
-                break
-    
-    # Fallback URL jika total_size gagal didapatkan
-    if url_to_use is None and urls:
-        url_to_use = urls[0]
-
-
-    print(f"Memulai unduhan {output_filename} dengan aria2c.")
-
-    command = [
-        'aria2c', '--allow-overwrite', '--file-allocation=none',
-        '--console-log-level=warn', '--summary-interval=0',
-        '-x', '16', '-s', '16', '-c',
-        '--async-dns=false', '--log-level=warn', '--continue',
-        '--input-file', '-',
-        '-o', output_filename
-    ]
-
-    process = None
-    # BARIS KRITIS: output_filename dijamin berupa string di sini
-    aria2_temp_file = output_filename + '.aria2' 
-
-    try:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        
-        # Kirim URL yang telah dipilih ke stdin aria2c
-        if url_to_use:
-            process.stdin.write(url_to_use + '\n')
-        
-        process.stdin.close()
-        
-        start_time = time.time()
-        timeout = 300
-        
-        # === Loop Pemantauan Unduhan ===
-        while time.time() - start_time < timeout:
-            if os.path.exists(output_filename):
-                current_size = os.path.getsize(output_filename)
-                
-                # Kondisi Selesai
-                if (total_size is not None and current_size >= total_size) or not os.path.exists(aria2_temp_file):
-                    print(f"File {output_filename} selesai. Menghentikan aria2c...")
-                    process.terminate()
-                    time.sleep(1)
-                    if process.poll() is None:
-                        process.kill()
-                    return output_filename
-            
-            # Cek apakah aria2c berhenti sendiri
-            if process.poll() is not None:
-                if os.path.exists(output_filename) and os.path.getsize(output_filename) > 0:
-                    print(f"Aria2c selesai secara normal untuk {output_filename}.")
-                    return output_filename
-                
-                print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
-                return None
-            
-            time.sleep(2)
-
-        # === Timeout ===
-        print("Waktu habis. Menghentikan aria2c.")
-        if process and process.poll() is None:
-            process.terminate()
-            time.sleep(1)
-            process.kill()
-
-    except Exception as e:
-        print(f"Terjadi kesalahan saat menjalankan aria2c: {e}")
-        if process and process.poll() is None:
-            process.terminate()
-            time.sleep(1)
-            process.kill()
-
-    return None
