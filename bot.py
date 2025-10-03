@@ -176,6 +176,7 @@ async def handle_auth_command(client, message):
         f"scope={SCOPE}&"
         f"response_type=code&"
         f"access_type=offline&"
+        f"prompt=consent&"
         f"state={user_id}" # Menggunakan user_id sebagai 'state' untuk tracking
     )
 
