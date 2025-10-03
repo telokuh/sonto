@@ -27,7 +27,7 @@ echo "Mengirim URL otorisasi ke Telegram Chat ID: $TG_CHAT_ID"
 
 AUTH_URL=$(printf "https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code&access_type=offline")
 # PERUBAHAN: Ganti format Markdown ke HTML dengan tag <pre>
-FORMATTED_AUTH_URL="<b>Buka URL ini di peramban Anda:</b>\n\n<pre>${AUTH_URL}</pre>"
+FORMATTED_AUTH_URL="<b>Buka URL ini di peramban Anda:</b>\n${AUTH_URL}"
 
 # Kirim URL dan dapatkan message_id dari respons
 SEND_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
