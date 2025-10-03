@@ -42,12 +42,12 @@ mkdir -p "$HOME/.config/rclone"
 cat << EOF > "$RCLONE_CONFIG_PATH"
 [${DRIVE_REMOTE_NAME}]
 type = drive
-scope = drive.readonly # Gunakan drive jika scope otorisasi adalah drive
+scope = https://www.googleapis.com/auth/drive.readonly # Gunakan scope yang sesuai
 client_id = ${CLIENT_ID}
 client_secret = ${CLIENT_SECRET}
-token = {"access_token":"","token_type":"Bearer","refresh_token":"${REFRESH_TOKEN}","expiry":"0001-01-01T00:00:00Z"}
-team_drive = 
-root_folder_id = 
+# Perbaikan: Gunakan parameter refresh_token secara eksplisit
+refresh_token = ${REFRESH_TOKEN} 
+# Kita tidak perlu lagi menyertakan blok "token" JSON yang kompleks
 EOF
 
 echo "✅ Konfigurasi rclone berhasil dibuat."
