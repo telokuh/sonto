@@ -15,8 +15,7 @@ mediafire_page_url = os.environ.get("MEDIAFIRE_PAGE_URL")
 
 # Regex untuk mendeteksi URL
 MEGA_URL_REGEX = r"(?:https?://)?(?:www\.)?mega\.nz/.+"
-PIXELDRAIN_URL_REGEX = r"(?:https?://)?(?:www\.)?pixeldrain\.com/u/.+"
-GOFILE_URL_REGEX = r"(?:https?://)?(?:www\.)?gofile\.io/.+"
+
 
 if not mediafire_page_url:
     print("Error: MEDIAFIRE_PAGE_URL environment variable not set.")
@@ -33,13 +32,7 @@ def main_downloader(url):
         send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
         downloaded_filename = download_file_with_megatools(url)
     
-    elif re.match(PIXELDRAIN_URL_REGEX, url):
-        print("URL download with aria2c .")
-        download_url_pixeldrain = get_download_url_from_pixeldrain_api(url)
-        if download_url_pixeldrain:
-            downloaded_filename = download_file_with_aria2c(download_url_pixeldrain)
-
-    elif "mediafire" in url or "gofile" in url or "sourceforge" in url:
+    elif "mediafire" in url or "gofile" in url or "pixeldrain" in url:
         print("URL cocok dengan Gofile. Menggunakan Selenium...")
         downloaded_filename = downloader(url)
         
