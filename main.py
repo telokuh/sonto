@@ -31,8 +31,9 @@ def main_downloader(url):
         print("URL cocok dengan MEGA. Menggunakan megatools...")
         send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
         downloaded_filename = download_file_with_megatools(url)
-    
-    elif "mediafire" in url or "gofile" in url or "pixeldrain" in url:
+    elif "pixeldrain" in url:
+        downloaded_filename = get_download_url_from_pixeldrain_api(url)
+    elif "mediafire" in url or "gofile" in url:
         print(" Menggunakan Selenium...")
         downloaded_filename = downloader(url)
         
