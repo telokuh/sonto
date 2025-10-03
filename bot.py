@@ -5,7 +5,7 @@ import threading
 from pyrogram import Client, filters
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request 
-
+from pyrogram.enums import ParseMode
 # Muat variabel dari file .env
 load_dotenv()
 
@@ -191,7 +191,7 @@ async def handle_auth_command(client, message):
         await client.send_message(
             chat_id=user_id,
             text=formatted_auth_url,
-            parse_mode="HTML"
+            parse_mode=ParseMode.HTML
         )
         await message.reply_text("✅ Tautan otorisasi berhasil dikirim. Cek pesan terbaru Anda.")
     except Exception as e:
