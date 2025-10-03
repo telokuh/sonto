@@ -19,7 +19,7 @@ DRIVE_UPLOAD_FOLDER="/TheGdriveXbot" # Folder unik per hari di Drive
 
 # File yang akan diunggah (Asumsikan sudah didownload dan namanya diketahui)
 # Anda harus mengganti 'downloaded_filename.txt' dengan file yang benar.
-DOWNLOADED_FILE=$(cat downloaded_filename.txt) 
+DOWNLOADED_FILE=$FILENAME 
 
 if [ -z "$REFRESH_TOKEN" ]; then
     echo "❌ ERROR: DRIVE_REFRESH_TOKEN tidak ditemukan. Otorisasi Gagal."
