@@ -54,7 +54,6 @@ fi
 
 echo "✅ URL berhasil dikirim. Silakan periksa Telegram Anda dan kirim kode balasan."
 
-
 # --- 3. TUNGGU KODE OTORISASI DARI TELEGRAM ---
 
 echo ""
@@ -63,10 +62,10 @@ echo "Menunggu kode otorisasi dari Telegram... (Mungkin perlu beberapa detik)"
 AUTH_CODE=""
 LAST_UPDATE_ID=0
 TIMEOUT_SECS=300 # Timeout 5 menit
-
 START_TIME=$(date +%s)
+FOUND_CODE=0 # <--- VARIABEL KONTROL GLOBAL
 
-while [ -z "$AUTH_CODE" ]; do
+while [ "$FOUND_CODE" -eq 0 ]; do
     CURRENT_TIME=$(date +%s)
     ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
 
@@ -74,9 +73,8 @@ while [ -z "$AUTH_CODE" ]; do
         echo "❌ Timeout tercapai. Tidak ada kode otorisasi yang diterima dalam $TIMEOUT_SECS detik."
         exit 1
     fi
-    echo "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30"
-    # Dapatkan pembaruan baru. Gunakan timeout curl untuk memblokir hingga ada pesan baru (long polling)
-    # Gunakan 'timeout=30' untuk long-polling yang andal
+    
+    # Dapatkan pembaruan baru (Long Polling)
     UPDATES=$(curl -s --max-time 40 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30")
 
     # Cek pesan terbaru
@@ -84,7 +82,7 @@ while [ -z "$AUTH_CODE" ]; do
 
     if [ -n "$NEW_MESSAGES" ]; then
         
-        # Ambil pembaruan terakhir dan perbarui offset
+        # Ambil pembaruan terakhir dan perbarui offset untuk iterasi berikutnya
         LAST_UPDATE_ID=$(echo "$UPDATES" | jq '[.result[].update_id] | max + 1')
 
         # Iterasi melalui semua pesan baru yang ada
@@ -92,25 +90,45 @@ while [ -z "$AUTH_CODE" ]; do
             CHAT_ID=$(echo "$MESSAGE_JSON" | jq -r '.message.chat.id')
             MESSAGE_TEXT=$(echo "$MESSAGE_JSON" | jq -r '.message.text // empty')
 
-            # Kita hanya peduli pada pesan yang datang dari TG_CHAT_ID yang kita minta otorisasi
             if [ "$CHAT_ID" = "$TG_CHAT_ID" ]; then
-                # Gunakan regex untuk menemukan string yang terlihat seperti kode otorisasi
                 if [[ "$MESSAGE_TEXT" =~ ^[48]\/.* ]]; then
+                    # Kode ditemukan! Simpan nilai, set global flag, dan keluar dari sub-shell
                     AUTH_CODE="$MESSAGE_TEXT"
                     echo "✅ Kode otorisasi diterima!"
-                    break 2 # Keluar dari kedua loop
+                    FOUND_CODE=1 # <--- Set flag global (meskipun di sub-shell, kita tetap menggunakannya)
+                    
+                    # Kita harus keluar dari sub-shell ini, bukan loop utama
+                    exit 0 
                 fi
             fi
         done
-    fi
+        
+        # *** PENAMBAHAN KRITIS ***
+        # Karena kita exit 0 dari sub-shell, kita perlu menangkap exit code-nya
+        if [ $? -eq 0 ] && [ "$FOUND_CODE" -eq 1 ]; then
+            # Jika sub-shell berhasil keluar dan kode ditemukan, kita break loop utama
+            break
+        fi
 
-    # Jika AUTH_CODE sudah disetel, kita keluar
-    if [ -n "$AUTH_CODE" ]; then
-        break
+        # Karena kita tidak bisa mengakses AUTH_CODE yang di set di sub-shell,
+        # kita perlu mengandalkan LAST_UPDATE_ID untuk mencegah pemrosesan ulang
+        # dan melanjutkan iterasi hingga kondisi 'break' terpenuhi.
     fi
-
-    # Tidak perlu sleep di sini karena kita menggunakan long-polling di curl
 done
+
+# Setelah loop berhenti, kita harus mengatur AUTH_CODE dari UPDATES (jika masih kosong)
+# Ini adalah langkah pengamanan untuk skrip yang dijalankan di sub-shell.
+if [ -z "$AUTH_CODE" ]; then
+    AUTH_CODE=$(echo "$UPDATES" | jq -r --arg chat_id "${TG_CHAT_ID}" '.result[] | select(.message.chat.id | tostring == $chat_id) | .message.text' | grep -oE '^[48]\/.*' | tail -n 1)
+fi
+
+# --- LANJUTKAN KE LANGKAH 4 (TUKAR KODE) ---
+if [ -z "$AUTH_CODE" ]; then
+    echo "❌ Gagal mendapatkan AUTH_CODE di luar loop. Mengakhiri skrip."
+    exit 1
+fi
+
+echo "Kode yang akan digunakan: $AUTH_CODE" 
 
 # --- 4. TUKAR KODE UNTUK TOKEN ---
 
