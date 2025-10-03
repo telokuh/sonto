@@ -49,7 +49,7 @@ jobs:
           echo "✅ Menyimpan Refresh Token ke Secret: $TARGET_SECRET_NAME"
           
           # Gunakan GitHub CLI (gh) untuk memperbarui atau membuat Secret
-          gh secret set "$TARGET_SECRET_NAME" --body "${{ env.NEW_REFRESH_TOKEN }}" --repo ${{ github.repository }}
+          gh variable set "$TARGET_SECRET_NAME" --body "${{ env.NEW_REFRESH_TOKEN }}" --repo ${{ github.repository }}
         
         env:
           GH_TOKEN: ${{ vars.GH_PAT }} 
