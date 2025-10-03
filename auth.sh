@@ -20,7 +20,6 @@ if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$TG_BOT_TOKEN" ] || [
     exit 1
 fi
 
-# ... (kode sebelumnya) ...
 
 # --- 2. KIRIM URL KE TELEGRAM ---
 
@@ -55,44 +54,62 @@ fi
 
 echo "✅ URL berhasil dikirim. Silakan periksa Telegram Anda dan kirim kode balasan."
 
+
 # --- 3. TUNGGU KODE OTORISASI DARI TELEGRAM ---
 
 echo ""
-echo "Menunggu kode otorisasi dari Telegram..."
+echo "Menunggu kode otorisasi dari Telegram... (Mungkin perlu beberapa detik)"
 
 AUTH_CODE=""
 LAST_UPDATE_ID=0
+TIMEOUT_SECS=300 # Timeout 5 menit
+
+START_TIME=$(date +%s)
 
 while [ -z "$AUTH_CODE" ]; do
-    # Dapatkan pembaruan baru (pesan baru) dari bot
-    UPDATES=$(curl -s "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}")
+    CURRENT_TIME=$(date +%s)
+    ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+    if [ "$ELAPSED_TIME" -ge "$TIMEOUT_SECS" ]; then
+        echo "❌ Timeout tercapai. Tidak ada kode otorisasi yang diterima dalam $TIMEOUT_SECS detik."
+        exit 1
+    fi
     
+    # Dapatkan pembaruan baru. Gunakan timeout curl untuk memblokir hingga ada pesan baru (long polling)
+    # Gunakan 'timeout=30' untuk long-polling yang andal
+    UPDATES=$(curl -s --max-time 40 "https://api.telegram.org/bot${TG_BOT_TOKEN}/getUpdates?offset=${LAST_UPDATE_ID}&timeout=30")
+
+    # Cek pesan terbaru
     NEW_MESSAGES=$(echo "$UPDATES" | jq -c '.result[] | select(.message)')
 
     if [ -n "$NEW_MESSAGES" ]; then
+        
+        # Ambil pembaruan terakhir dan perbarui offset
         LAST_UPDATE_ID=$(echo "$UPDATES" | jq '[.result[].update_id] | max + 1')
 
+        # Iterasi melalui semua pesan baru yang ada
         echo "$NEW_MESSAGES" | while read -r MESSAGE_JSON; do
             CHAT_ID=$(echo "$MESSAGE_JSON" | jq -r '.message.chat.id')
             MESSAGE_TEXT=$(echo "$MESSAGE_JSON" | jq -r '.message.text // empty')
 
+            # Kita hanya peduli pada pesan yang datang dari TG_CHAT_ID yang kita minta otorisasi
             if [ "$CHAT_ID" = "$TG_CHAT_ID" ]; then
-                # Regex untuk menemukan kode otorisasi (biasanya dimulai dengan 4/ atau 8/)
+                # Gunakan regex untuk menemukan string yang terlihat seperti kode otorisasi
                 if [[ "$MESSAGE_TEXT" =~ ^[48]\/.* ]]; then
                     AUTH_CODE="$MESSAGE_TEXT"
-                    echo "✅ Kode otorisasi diterima: $AUTH_CODE"
-                    break 2 # Hentikan loop while dan loop outer
+                    echo "✅ Kode otorisasi diterima!"
+                    break 2 # Keluar dari kedua loop
                 fi
             fi
         done
     fi
 
+    # Jika AUTH_CODE sudah disetel, kita keluar
     if [ -n "$AUTH_CODE" ]; then
         break
     fi
 
-    # Jeda
-    sleep 3
+    # Tidak perlu sleep di sini karena kita menggunakan long-polling di curl
 done
 
 # --- 4. TUKAR KODE UNTUK TOKEN ---
