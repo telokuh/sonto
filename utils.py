@@ -20,7 +20,35 @@ from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
+def name(url):
+    """
+    Mencoba mendapatkan nama file dari Content-Disposition header.
+    Jika tidak ada, menggunakan bagian akhir path URL.
+    """
+    try:
+        # Gunakan HEAD request untuk meminimalkan transfer data
+        with requests.head(url, allow_redirects=True, timeout=10) as response:
+            # 1. Coba dapatkan dari header Content-Disposition
+            if 'Content-Disposition' in response.headers:
+                cd = response.headers.get('Content-Disposition')
+                # Logika sederhana untuk mengekstrak nama file
+                filename = cd.split('filename=')[-1].strip('"\' ')
+                if filename:
+                    return filename
+            
+            # 2. Jika tidak ada header, ambil dari path URL
+            parsed_url = urlparse(url)
+            filename = os.path.basename(parsed_url.path)
+            
+            # 3. Berikan nama default jika path kosong
+            if filename:
+                return filename
+            else:
+                return 'downloaded_file' # Nama default cadangan
 
+    except requests.exceptions.RequestException as e:
+        print(f"Peringatan: Gagal mendapatkan nama file dari URL {url}. Menggunakan nama default. Error: {e}")
+        return 'downloaded_file_error'
 
 def set_url(url, param_name, param_value):
     """Mengganti nilai parameter URL tertentu."""
@@ -304,12 +332,14 @@ def get_total_file_size_safe(url):
     
     return None
 
-def download_file_with_aria2c(urls, output_filename):
+def download_file_with_aria2c(urls, output_filename=None):
     """
     Mengunduh file menggunakan aria2c. Menghentikan proses
     setelah file mencapai ukuran penuh yang diharapkan.
     """
     print(f"Memulai unduhan {output_filename} dengan aria2c.")
+    if output_filename is None:
+       output_filename = name(urls)
 
     total_size = None 
     command = [
