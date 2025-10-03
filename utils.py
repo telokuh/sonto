@@ -128,7 +128,7 @@ def get_download_url_from_pixeldrain_api(url):
         if "sourceforge" in url:
             download_url = url
         print(f"URL Unduhan Pixeldrain ditemukan: {download_url}")
-        return download_url
+        return [download_url]
     except Exception as e:
         print(f"Gagal mendapatkan URL unduhan Pixeldrain: {e}")
         return None
