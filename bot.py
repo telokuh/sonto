@@ -14,12 +14,12 @@ API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-OWNER_ID = os.environ.get("OWNER_ID")
+OWNER_ID = os.environ.get("OWNER_ID") # Digunakan untuk validasi lokal jika perlu
 
 # Konfigurasi GitHub Repository
 GITHUB_REPO_OWNER = "telokuh"
 GITHUB_REPO_NAME = "sonto"
-GITHUB_EVENT_TYPE = "new_url_received" # Kita akan gunakan ini untuk kedua event
+GITHUB_EVENT_TYPE = "new_url_received" 
 
 # Inisialisasi bot Pyrogram
 pyrogram_app = Client(
@@ -41,17 +41,14 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
 # --- FUNGSI BANTUAN UNTUK MENGIRIM KE GITHUB ACTIONS ---
-# Kita buat fungsi terpisah agar kode lebih rapi dan bisa digunakan kembali (reusable)
-async def send_to_github_actions(message, url_or_command_text):
+async def send_to_github_actions(message, url_or_command_text, extra_payload=None):
     """
     Mengirim event 'repository_dispatch' ke GitHub Actions.
-    :param message: Objek pesan Pyrogram.
-    :param url_or_command_text: String yang akan dikirim sebagai 'url' di payload.
+    :param extra_payload: Dict opsional untuk data tambahan di client_payload.
     """
     
     headers = {
         "Accept": "application/vnd.github.v3+json",
-        # Pastikan Anda memiliki GITHUB_TOKEN yang valid di .env
         "Authorization": f"token {GITHUB_TOKEN}", 
     }
 
@@ -59,9 +56,9 @@ async def send_to_github_actions(message, url_or_command_text):
     payload = {
         "event_type": GITHUB_EVENT_TYPE,
         "client_payload": {
-            # Menggunakan satu kunci 'url' untuk menampung URL atau teks perintah
             "url": url_or_command_text, 
-            "sender": message.from_user.username or str(message.from_user.id)
+            "sender": message.from_user.username or str(message.from_user.id),
+            **(extra_payload or {}) # Menggabungkan payload tambahan
         }
     }
     
@@ -92,22 +89,26 @@ async def handle_url(client, message):
     if "http" in text:
         url = text
         await message.reply_text(f"URL terdeteksi: `{url}`\n")
+        # Kirim URL normal tanpa payload tambahan
         await send_to_github_actions(message, url)
     else:
-        # Peringatan: Logika ini bisa membalas semua pesan teks yang bukan URL
-        # Anda mungkin ingin memindahkannya ke handler lain jika Anda punya perintah lain
+        # Jika bukan URL dan bukan perintah, abaikan (atau berikan balasan default)
         pass 
 
-# --- HANDLER BARU UNTUK PERINTAH /auth ---
+# --- HANDLER UNTUK PERINTAH /auth ---
 @pyrogram_app.on_message(filters.command("auth") & filters.private & ~filters.me)
 async def handle_auth_command(client, message):
-    # Teks yang akan dikirim ke GitHub Actions sebagai 'url'
+    user_id = str(message.from_user.id)
     AUTH_COMMAND_TEXT = "auth" 
     
-    await message.reply_text("Perintah /auth diterima.")
+    await message.reply_text("Perintah /auth diterima. Memulai proses otorisasi...")
     
-    # Panggil fungsi bantuan untuk mengirim ke GitHub
-    await send_to_github_actions(message, AUTH_COMMAND_TEXT)
+    # Kirim event dengan tambahan 'chat_id' dari pengguna yang menjalankan perintah
+    await send_to_github_actions(
+        message, 
+        AUTH_COMMAND_TEXT, 
+        extra_payload={"chat_id": user_id}
+    )
 
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
