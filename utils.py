@@ -89,54 +89,56 @@ def source_url(download_url):
         print(f"Terjadi kesalahan: {e}")
         return None
 
-def pixeldrain(url, max_retries=3):
+import os
+import requests
+import re
+from urllib.parse import urlparse
+# ... (impor dan fungsi lain tetap sama) ...
+
+def get_pixeldrain_info_and_download(url):
     """
-    Mengambil URL unduhan langsung dan nama file dari Pixeldrain API,
-    kemudian mengunduh file menggunakan aria2c dengan mekanisme retry.
+    Mengambil URL unduhan langsung dari Pixeldrain API,
+    menggunakan requests.head() untuk mendapatkan nama file dan ukuran,
+    kemudian mengunduh file menggunakan aria2c.
     """
-    print(f"Menganalisis URL Pixeldrain: {url}")
-    initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari Pixeldrain...**\nMemperoleh detail file...")
+    print(f"Menganalisis URL Pixeldrain: {url} menggunakan requests.head()")
+    initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari Pixeldrain...**\nMemperoleh detail file dengan HEAD request...")
     
-    file_id = None
     try:
-        # 1. Mengambil File ID
+        # 1. Mendapatkan URL Unduhan Langsung
         file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
         if not file_id_match:
             raise ValueError("URL Pixeldrain tidak valid.")
             
         file_id = file_id_match.group(2)
-        api_url = f"https://pixeldrain.com/api/file/{file_id}"
-        download_url = f"{api_url}?download"
+        # URL unduhan langsung
+        download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
         
-        # 2. Mendapatkan Nama File menggunakan API Info dengan Retry
-        for attempt in range(max_retries):
-            try:
-                edit_telegram_message(initial_message_id, f"⏳ **Memperoleh detail...**\nPercobaan ke-{attempt + 1}/{max_retries}.")
-                # Coba ambil info dalam 15 detik (ditingkatkan dari 10 detik default)
-                info_response = requests.get(api_url, timeout=15).json() 
+        # 2. Menggunakan requests.head() untuk Mendapatkan Nama File dan Ukuran
+        head_resp = requests.head(download_url, allow_redirects=True, timeout=10)
+        head_resp.raise_for_status() # Akan memunculkan kesalahan untuk status 4xx/5xx
+
+        # Mendapatkan Nama File dari header Content-Disposition
+        filename = "pixeldrain_download"
+        content_disposition = head_resp.headers.get('Content-Disposition')
+        if content_disposition:
+            # Mencari 'filename' di header
+            match = re.search(r'filename\*?=(?:UTF-8\'\'|")(.+?)(?:"|;|$)', content_disposition)
+            if match:
+                # Menggunakan nama file yang ditemukan, menghapus tanda kutip jika ada
+                filename = match.group(1).strip('"')
+            else:
+                # Fallback untuk mendapatkan nama dari path URL
+                filename = os.path.basename(urlparse(head_resp.url).path)
                 
-                if not info_response.get("success"):
-                    raise Exception(f"API Pixeldrain gagal: {info_response.get('message', 'Tidak diketahui')}")
-                
-                # Jika berhasil, keluar dari loop retry
-                break 
-                
-            except requests.exceptions.Timeout:
-                print(f"Percobaan {attempt + 1} gagal: Read timed out. Mencoba lagi...")
-                if attempt == max_retries - 1:
-                    raise requests.exceptions.Timeout("Gagal setelah semua percobaan.")
-                time.sleep(2 * (attempt + 1)) # Tunggu lebih lama setiap kali
-            except requests.exceptions.RequestException as e:
-                print(f"Percobaan {attempt + 1} gagal: Kesalahan koneksi ({e}). Mencoba lagi...")
-                if attempt == max_retries - 1:
-                    raise requests.exceptions.RequestException(f"Gagal setelah semua percobaan. Detail: {e}")
-                time.sleep(2 * (attempt + 1))
+        # Mendapatkan Ukuran File dari header Content-Length
+        size_bytes = head_resp.headers.get('Content-Length')
+        readable_size = human_readable_size(int(size_bytes)) if size_bytes else "Ukuran tidak diketahui"
         
-        # Lanjutkan jika berhasil mendapatkan respons
-        filename = info_response['file']['name']
-        file_size = info_response['file']['size']
-        
-        edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`\nUkuran: `{human_readable_size(file_size)}`")
+        edit_telegram_message(
+            initial_message_id, 
+            f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`\nUkuran: `{readable_size}`"
+        )
 
         # 3. Memanggil aria2c dengan URL dan Nama File yang Benar
         downloaded_filename = download_file_with_aria2c([download_url], filename)
@@ -147,11 +149,17 @@ def pixeldrain(url, max_retries=3):
         else:
             raise Exception("Aria2c gagal mengunduh file Pixeldrain.")
 
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Gagal mendapatkan info/unduhan dengan HEAD: {str(e)}"
+        print(error_msg)
+        edit_telegram_message(initial_message_id, f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {error_msg[:150]}...")
+        return None
     except Exception as e:
         print(f"Gagal mengunduh Pixeldrain: {e}")
-        error_message = f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {str(e)[:150]}..."
-        edit_telegram_message(initial_message_id, error_message)
+        edit_telegram_message(initial_message_id, f"❌ **Pixeldrain: Unduhan gagal!**\nDetail: {str(e)[:150]}...")
         return None
+
+
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
