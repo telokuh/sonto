@@ -28,8 +28,8 @@ def main_downloader(url):
 
     # --- Logika Berjenjang ---
     if re.match(MEGA_URL_REGEX, url):
-        print("URL cocok dengan MEGA. Menggunakan megatools...")
-        send_telegram_message("`yt-dlp` gagal memproses URL MEGA. Beralih ke `megatools`...")
+        print("MEGA. Menggunakan megatools...")
+        
         downloaded_filename = download_file_with_megatools(url)
     elif "pixeldrain" in url:
         downloaded_filename = pixeldrain(url)
@@ -43,10 +43,7 @@ def main_downloader(url):
         print("URL tidak cocok dengan pola khusus. Mencoba dengan yt-dlp...")
         yt_dlp_success = download_with_yt_dlp(url, message_id=initial_message_id)
         if yt_dlp_success:
-            # Karena yt-dlp sudah mengunduh file, tidak perlu memanggil aria2c.
-            # Anda perlu menambahkan logika untuk mendapatkan nama file dari yt-dlp jika dibutuhkan.
-            # Untuk saat ini, kita akan mengasumsikan unduhan berhasil.
-            downloaded_filename = "file_berhasil_diunduh_dengan_yt-dlp" # Placeholder
+            downloaded_filename = yt_dlp_success
         else:
             # Fallback ke aria2c jika yt-dlp gagal
             print("yt-dlp gagal. Mencoba dengan aria2c sebagai cadangan...")
