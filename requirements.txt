@@ -4,3 +4,6 @@ requests
 selenium
 webdriver-manager
 yt-dlp
+PyDrive
+google-api-python-client
+oauth2client
