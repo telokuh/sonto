@@ -1,37 +1,48 @@
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
-from oauth2client.client import OAuth2Credentials
-from googleapiclient.discovery import build # Untuk membuat objek layanan Drive
-from googleapiclient.http import MediaFileUpload # Untuk Resumable Upload
 import os
-import time # Untuk jeda saat upload (opsional)
+import sys
+from oauth2client.client import OAuth2Credentials 
+from googleapiclient.discovery import build 
+from googleapiclient.http import MediaFileUpload 
+from httplib2 import Http
 
-# Ambil kredensial dari Environment Variables
+# =========================================================
+# 1. KONFIGURASI DAN INISIALISASI
+# =========================================================
+
+# Ambil kredensial dari Environment Variables yang disuntikkan di main.yml
 REFRESH_TOKEN = os.environ.get('DRIVE_REFRESH_TOKEN')
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-# Tentukan file yang akan diunggah (Asumsikan Anda membaca nama file dari file teks)
+# Tentukan file yang akan diunggah
 try:
     with open("downloaded_filename.txt", "r") as f:
         DOWNLOADED_FILE = f.read().strip()
 except FileNotFoundError:
     print("❌ ERROR: File 'downloaded_filename.txt' tidak ditemukan. Upload dibatalkan.")
-    exit(1)
+    sys.exit(1)
 
-# Folder Drive Tujuan (Opsional, gunakan ID folder)
-# DRIVE_FOLDER_ID = "YOUR_SPECIFIC_FOLDER_ID"
-DRIVE_FOLDER_ID = None # Jika None, akan diunggah ke root Drive
+# Jika file download tidak ada di direktori kerja, batalkan.
+if not os.path.exists(DOWNLOADED_FILE):
+    print(f"❌ ERROR: File '{DOWNLOADED_FILE}' tidak ditemukan di sistem file. Upload dibatalkan.")
+    sys.exit(1)
 
 if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
     print("❌ ERROR: Kredensial Google Drive tidak lengkap di environment.")
-    exit(1)
+    sys.exit(1)
+
+# Folder Drive Tujuan (Buat folder unik per hari)
+DRIVE_UPLOAD_FOLDER_NAME = f"uploads_bot_{time.strftime('%Y%m%d')}" 
+
+# Asumsikan MIME Type ZIP (ganti jika Anda tahu jenis file)
+MIME_TYPE = 'application/zip' 
+# Anda mungkin perlu logika untuk menentukan MIME type berdasarkan ekstensi.
 
 # =========================================================
-# 1. OTENTIKASI & REFRESH TOKEN
+# 2. OTENTIKASI & REFRESH TOKEN
 # =========================================================
 
-# 1.1 Buat objek Credentials yang benar dari Refresh Token Anda
+# 2.1 Buat objek Credentials yang benar dari Refresh Token
 credentials = OAuth2Credentials(
     access_token=None,
     client_id=CLIENT_ID,
@@ -39,62 +50,81 @@ credentials = OAuth2Credentials(
     refresh_token=REFRESH_TOKEN,
     token_expiry=None,
     token_uri='https://oauth2.googleapis.com/token',
-    user_agent='PyDrive-bot'
+    user_agent='GH-Actions-DriveUploader'
 )
 
-# 1.2 Suntikkan objek Credentials dan Refresh
+# 2.2 Memperbarui Access Token (Perbaikan untuk 'NoneType' object is not callable)
 print("⚡ Memperbarui Access Token menggunakan Refresh Token...")
+
+http_pool = Http() 
+
 try:
-    credentials.refresh(http=None) # PyDrive/OAuth2Client Refresh
+    # Lakukan refresh, salurkan objek HTTP yang valid
+    credentials.refresh(http=http_pool) 
 except Exception as e:
     print(f"❌ Gagal memperbarui token. Pastikan Scope sudah 'drive' penuh dan Token valid: {e}")
-    exit(1)
+    sys.exit(1)
 
-# =========================================================
-# 2. INISIALISASI LAYANAN DRIVE (googleapiclient)
-# =========================================================
-
-# Gunakan credentials.authorize(Http()) untuk mendapatkan objek HTTP yang terautentikasi
-# Objek ini akan digunakan oleh googleapiclient.discovery.build
-from httplib2 import Http
-http_auth = credentials.authorize(Http())
-
-# Buat objek layanan Drive
+# 2.3 Inisialisasi Layanan Drive
+http_auth = credentials.authorize(http_pool) 
 drive_service = build('drive', 'v3', http=http_auth)
 
 print("✅ Autentikasi Drive berhasil. Siap upload!")
 
 # =========================================================
-# 3. RESUMABLE UPLOAD
+# 3. LOGIKA UPLOAD
 # =========================================================
 
+# Fungsi untuk mencari atau membuat folder
+def get_or_create_folder(service, folder_name, parent_id=None):
+    # Cek apakah folder sudah ada
+    query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
+    if parent_id:
+        query += f" and '{parent_id}' in parents"
+        
+    response = service.files().list(q=query, fields='files(id)').execute()
+    files = response.get('files', [])
+    
+    if files:
+        print(f"💡 Folder '{folder_name}' sudah ada.")
+        return files[0].get('id')
+    
+    # Jika tidak ada, buat folder baru
+    file_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id] if parent_id else []
+    }
+    file = service.files().create(body=file_metadata, fields='id').execute()
+    print(f"➕ Folder '{folder_name}' berhasil dibuat.")
+    return file.get('id')
+
+
 try:
-    # 3.1 Metadata File
+    # 3.1 Cari atau buat folder tujuan
+    target_folder_id = get_or_create_folder(drive_service, DRIVE_UPLOAD_FOLDER_NAME)
+
+    # 3.2 Metadata File
     file_metadata = {
         'name': DOWNLOADED_FILE,
-        # Jika DRIVE_FOLDER_ID disetel, tambahkan parents
-        'parents': [DRIVE_FOLDER_ID] if DRIVE_FOLDER_ID else [] 
+        'parents': [target_folder_id] 
     }
 
-    # Asumsikan MIME Type ZIP atau gunakan 'application/octet-stream' jika tidak yakin
-    MIME_TYPE = 'application/zip' 
-    
-    # 3.2 Buat MediaFileUpload object dengan resumable=True
+    # 3.3 Buat MediaFileUpload object dengan resumable=True
     media = MediaFileUpload(
         DOWNLOADED_FILE, 
         mimetype=MIME_TYPE, 
         resumable=True
     )
 
-    # 3.3 Buat Permintaan Upload
-    # Catatan: Kita menggunakan drive_service (bukan objek PyDrive)
+    # 3.4 Buat Permintaan Upload
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id,webContentLink' # Meminta ID dan link untuk respons
+        fields='id,webViewLink' 
     )
 
-    # 3.4 Mulai Upload dan Tangani Chunks
+    # 3.5 Mulai Upload dan Tangani Chunks
     response = None
     print(f'🚀 Memulai upload Resumable untuk: {DOWNLOADED_FILE}...')
     
@@ -102,13 +132,13 @@ try:
         status, response = request.next_chunk()
         if status:
             progress = int(status.progress() * 100)
-            # Batasi cetakan progress agar log tidak terlalu panjang
+            # Batasi cetakan progress
             if progress % 10 == 0:
                 print(f'   Uploaded {progress}%')
         
     print(f'✅ Upload complete! File ID: {response.get("id")}')
-    print(f'🔗 Link Download Web: {response.get("webContentLink")}')
+    print(f'🔗 Link Web Drive: {response.get("webViewLink")}')
 
 except Exception as e:
     print(f"❌ Gagal saat upload file: {e}")
-    exit(1)
+    sys.exit(1)
