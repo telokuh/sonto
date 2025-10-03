@@ -58,7 +58,7 @@ try:
     print(f"🚀 Memulai upload file: {DOWNLOADED_FILE}")
     gfile = drive.CreateFile({'title': DOWNLOADED_FILE, 'mimeType': 'application/zip'})
     gfile.SetContentFile(DOWNLOADED_FILE)
-    gfile.Upload() 
+    gfile.Upload(resumable=True) 
     print(f"✅ Upload {DOWNLOADED_FILE} berhasil. ID: {gfile['id']}")
 except Exception as e:
     print(f"❌ Gagal saat upload file: {e}")
