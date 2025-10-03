@@ -546,7 +546,10 @@ def downloader(url):
                 EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
             download_button.click()
+            time.sleep(3)
             print(download_button.get_attribute('outerHTML'))
+            print("hmm")
+
             start_time = time.time()
             timeout = 300
             
