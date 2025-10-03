@@ -163,35 +163,12 @@ jobs:
         shell: bash
 
 
-      - name: Install rclone
-        run: |
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y rclone
-          
 
       # --- LANKAH BARU UNTUK MENGAMBIL TOKEN DAN UPLOAD ---
-      - name: Get Refresh Token and Run Uploader
-        id: uploader
+      - name: Uploader
+        
         run: |
-          # 1. Tentukan nama Secret Refresh Token
-          OWNER_ID="${{ env.OWNER_ID }}"
-          PAYLOAD_ID="${{ github.event.client_payload.sender }}"
-          
-          if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
-              SECRET_NAME="DRIVE_REFRESH_TOKEN_OWNER"
-          else
-              SECRET_NAME="DRIVE_REFRESH_TOKEN_USER_${PAYLOAD_ID}"
-          fi
-
-          echo "Mengambil Refresh Token dari Secret: $SECRET_NAME"
-          
-          # 2. Ambil nilai token dari GitHub Secrets menggunakan 'gh' CLI
-          # Ini memerlukan secrets.GH_PAT dengan izin 'secrets'
-          echo "token_secret_name=$SECRET_NAME" >> $GITHUB_OUTPUT
-          # 3. Buat file script menjadi executable
-          chmod +x ./upload.sh
-          
-          # 4. Eksekusi skrip upload dengan menyuntikkan kredensial
-          ./upload.sh
+          python upload.py
         
         shell: bash
         env:
