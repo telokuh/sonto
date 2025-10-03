@@ -8,7 +8,7 @@
 # --- 1. KONFIGURASI ---
 
 # Variabel konfigurasi
-REDIRECT_URI="urn:ietf:wg:oauth:2.0:oob"
+REDIRECT_URI="http://localhost:3000"
 SCOPE="https://www.googleapis.com/auth/drive.readonly"
 
 # Variabel diambil dari lingkungan (Harus diatur di GitHub Actions ENVs)
