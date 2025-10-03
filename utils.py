@@ -533,6 +533,7 @@ def downloader(url):
         # Logika umum untuk GoFile dan Mediafire
         else:
             initial_message_id = send_telegram_message("⬇️ **Mulai mengunduh...**")
+            driver.get(url)
             if "gofile" in url:
                 download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
             elif "mediafire" in url:
@@ -546,7 +547,7 @@ def downloader(url):
                 EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
             download_button.click()
-            time.sleep(3)
+            time.sleep(2)
             print(download_button.get_attribute('outerHTML'))
             print("hmm")
 
