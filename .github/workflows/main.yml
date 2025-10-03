@@ -9,68 +9,96 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      
+    # Definisi Variabel Bantu (Opsional, tapi membantu keterbacaan)
+    env:
+      PAYLOAD_URL: ${{ github.event.client_payload.url }}
+      IS_AUTH: ${{ github.event.client_payload.url == 'auth' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+# ------------------------------------------------------------------------------------------
+# --- CABANG KHUSUS UNTUK PERINTAH /AUTH ---
+# ------------------------------------------------------------------------------------------
+
+      - name: Run Auth Script (auth.sh)
+        # HANYA JALANKAN jika payload.url adalah 'auth'
+        if: env.IS_AUTH == 'true'
+        run: |
+          echo "Perintah /auth diterima. Menjalankan auth.sh..."
+          # Pastikan file auth.sh ada di root repositori Anda dan dapat dieksekusi
+          bash auth.sh
+        # Jika Anda ingin job berhenti di sini setelah auth.sh, Anda bisa menambahkan 'exit 0' di auth.sh
+
+# ------------------------------------------------------------------------------------------
+# --- CABANG UNTUK PEMROSESAN URL (DOWNLOAD & RELEASE) ---
+# ------------------------------------------------------------------------------------------
 
       - name: Grant permissions to APT cache
+        # HANYA JALANKAN jika payload.url BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         run: |
           sudo chown -R $USER:$USER /var/cache/apt
           sudo chown -R $USER:$USER /var/lib/apt
 
 
       - name: Cache APT packages
-        if: contains(github.event.client_payload.url, 'mega.nz')
+        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
+        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
         uses: actions/cache@v3
         with:
           path: |
-           /var/cache/apt/archives
-           /var/lib/apt/lists
+            /var/cache/apt/archives
+            /var/lib/apt/lists
           key: ${{ runner.os }}-apt-megatools
           restore-keys: |
-           ${{ runner.os }}-apt-
-           
+            ${{ runner.os }}-apt-
+
 
       - name: Disable installing package docs
-        if: contains(github.event.client_payload.url, 'mega.nz')
-        
+        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
+        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
+
         run: |
-           sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
-           path-exclude /usr/share/doc/*
-           path-exclude /usr/share/man/*
-           path-exclude /usr/share/info/*
-           EOF
+          sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
+          path-exclude /usr/share/doc/*
+          path-exclude /usr/share/man/*
+          path-exclude /usr/share/info/*
+          EOF
 
       - name: Install megatools
-        if: contains(github.event.client_payload.url, 'mega.nz')
-        
+        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
+        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
+
         run: |
-          #sudo apt-get update
+          #sudo apt-get update # Sudah tidak diperlukan pada runner baru
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
-          
 
 
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
-        if: env.YOUTUBE_COOKIES_SECRET != ''
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true' && env.YOUTUBE_COOKIES_SECRET != ''
         run: |
           echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
 
       - name: Cache venv
         id: cache-venv
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         uses: actions/cache@v3
         with:
           path: .venv
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
 
 
-
       - name: dependency pip
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         run: |
-          
           python -m venv .venv
           source .venv/bin/activate
           echo ".venv/bin" >> $GITHUB_PATH
@@ -78,46 +106,51 @@ jobs:
           if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
           pip install -r requirements.txt
           fi
-          
+
       - name: Run Downloader Script
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         run: python main.py
         env:
           API_ID: ${{ vars.API_ID }}
           API_HASH: ${{ vars.API_HASH }}
           BOT_TOKEN: ${{ vars.BOT_TOKEN }}
           OWNER_ID: ${{ vars.OWNER_ID }}
-          MEDIAFIRE_PAGE_URL: ${{ github.event.client_payload.url }}
+          # Kita tetap menggunakan payload.url di sini karena kita tahu itu adalah URL
+          MEDIAFIRE_PAGE_URL: ${{ env.PAYLOAD_URL }}
           RCLONE_CONFIG: rclone.conf
-        
-        
+
 
       - name: Get Downloaded Filename
         id: get_filename
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         run: |
-         if [ ! -f "downloaded_filename.txt" ]; then
+          if [ ! -f "downloaded_filename.txt" ]; then
           echo "Error: downloaded_filename.txt not found. Exiting."
+          # Mengatur job sebagai failed jika file tidak ditemukan
           exit 1
-         fi
-         FILE_NAME=$(cat downloaded_filename.txt | tr -d '\n')
-         echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
+          fi
+          FILE_NAME=$(cat downloaded_filename.txt | tr -d '\n')
+          echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Create GitHub Release
         id: create_release
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         uses: softprops/action-gh-release@v1
         with:
-         tag_name: release-${{ github.run_number }}
-         name: File ${{ steps.get_filename.outputs.file_name }}
-         body: |
-          Rilis 
-          File: ${{ steps.get_filename.outputs.file_name }}
-         files: ${{ steps.get_filename.outputs.file_name }}
-        #env:
-         #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
+          tag_name: release-${{ github.run_number }}
+          name: File ${{ steps.get_filename.outputs.file_name }}
+          body: |
+            Rilis
+            File: ${{ steps.get_filename.outputs.file_name }}
+          files: ${{ steps.get_filename.outputs.file_name }}
 
       - name: Clean up apt cache
+        # HANYA JALANKAN jika BUKAN 'auth'
+        if: env.IS_AUTH != 'true'
         run: |
           sudo rm -f /var/cache/apt/archives/lock
           sudo rm -f /var/lib/apt/lists/lock
