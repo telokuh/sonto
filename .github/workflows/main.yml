@@ -1,119 +1,94 @@
-name: Download and Release
+name: Bot Automation Workflows
 
+# Trigger workflow ini saat event repository_dispatch dikirim dari bot.py (Pyrogram/Flask)
 on:
   repository_dispatch:
-    types: [new_url_received]
+    types: [new_url_received, refresh_token_received] # <<< Sekarang mendengarkan kedua event
 
 jobs:
-  download-and-release:
+  # =========================================================================
+  # JOB 1: STORE REFRESH TOKEN (BARU)
+  # Dipicu oleh Flask /oauth_callback. Bertugas menyimpan Refresh Token.
+  # =========================================================================
+  store_refresh_token:
+    # Hanya jalankan jika event type-nya adalah 'refresh_token_received'
+    if: github.event.action == 'refresh_token_received'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Diperlukan untuk actions/checkout dan softprops/action-gh-release
-
-    # Definisi Variabel Bantu
+    
+    # Variabel dari payload dan GitHub Vars
     env:
-      PAYLOAD_URL: ${{ github.event.client_payload.url }}
-      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.chat_id }} # Dari bot.py /auth
-      
-      # OWNER_ID harus diset sebagai GitHub Variable atau Secret
       OWNER_ID: ${{ vars.OWNER_ID }} 
+      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender_chat_id }}
+      NEW_REFRESH_TOKEN: ${{ github.event.client_payload.refresh_token }}
       
-      # Tentukan apakah ini adalah perintah auth
-      IS_AUTH_COMMAND: ${{ github.event.client_payload.url == 'auth' }}
-      
-      # Tentukan apakah ID pengirim adalah pemilik utama
-      IS_OWNER_AUTH: ${{ github.event.client_payload.chat_id == vars.OWNER_ID }}
-      
-      # Nama Secret utama
+      IS_OWNER_AUTH: ${{ github.event.client_payload.sender_chat_id == vars.OWNER_ID }}
       OWNER_SECRET_NAME: DRIVE_REFRESH_TOKEN_OWNER
       
-      # Nama Secret untuk pengguna lain
-      USER_SECRET_NAME: DRIVE_REFRESH_TOKEN_USER_${{ github.event.client_payload.chat_id }}
+    steps:
+      - name: Checkout Repository (Diperlukan untuk gh CLI)
+        uses: actions/checkout@v4
+        
+      - name: Hitung Nama Secret Target
+        id: secret_name_calc
+        run: |
+          TARGET_NAME=""
+          # Jika chat ID sama, gunakan nama pemilik.
+          if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
+            TARGET_NAME="${{ env.OWNER_SECRET_NAME }}"
+          else
+            # Jika user lain, buat Secret unik berdasarkan Chat ID
+            TARGET_NAME="DRIVE_REFRESH_TOKEN_USER_${{ env.PAYLOAD_CHAT_ID }}"
+          fi
+          echo "target_secret_name=$TARGET_NAME" >> $GITHUB_OUTPUT
+        shell: bash
+        
+      - name: Perbarui GitHub Secret (Simpan Refresh Token)
+        run: |
+          TARGET_SECRET_NAME="${{ steps.secret_name_calc.outputs.target_secret_name }}"
 
+          echo "✅ Menyimpan Refresh Token ke Secret: $TARGET_SECRET_NAME"
+          
+          # Gunakan GitHub CLI (gh) untuk memperbarui atau membuat Secret
+          gh secret set "$TARGET_SECRET_NAME" --body "${{ env.NEW_REFRESH_TOKEN }}" --repo ${{ github.repository }}
+        
+        env:
+          GH_TOKEN: ${{ vars.GH_PAT }} 
+          
+  # =========================================================================
+  # JOB 2: DOWNLOAD DAN RELEASE (DISESUAIKAN)
+  # Dipicu saat URL download diterima (new_url_received).
+  # Semua logika auth yang lama sudah DIHAPUS.
+  # =========================================================================
+  download-and-release:
+    # Hanya jalankan jika event type-nya adalah 'new_url_received'
+    if: github.event.action == 'new_url_received'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Diperlukan untuk checkout dan release
+      
+    # Definisi Variabel Bantu (Sekarang hanya untuk URL download)
+    env:
+      PAYLOAD_URL: ${{ github.event.client_payload.url }}
+      # Ganti PAYLOAD_CHAT_ID menjadi sender_chat_id
+      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender_chat_id }} 
+      OWNER_ID: ${{ vars.OWNER_ID }} 
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
 # ------------------------------------------------------------------------------------------
-# --- CABANG KHUSUS UNTUK PERINTAH /AUTH ---
-# ------------------------------------------------------------------------------------------
-
-      - name: Install Dependencies for Auth Script
-        # Hanya perlu jq dan curl untuk auth
-        if: env.IS_AUTH_COMMAND == 'true'
-        run: sudo apt-get update && sudo apt-get install -y jq curl
-
-      - name: Make Auth Script Runnable and Execute
-        id: auth_script
-        if: env.IS_AUTH_COMMAND == 'true'
-        run: |
-          chmod +x ./auth.sh
-          # Jalankan skrip. Output refresh_token akan disalurkan ke steps.auth_script.outputs
-          ./auth.sh
-        shell: bash
-        env:
-          # Kredensial Google dan Telegram (Ambil dari Secrets/Vars GitHub)
-          CLIENT_ID: ${{ vars.CLIENT_ID }}
-          CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
-          TG_BOT_TOKEN: ${{ vars.BOT_TOKEN }}
-          # Kita gunakan Chat ID dari payload, bukan OWNER_ID, untuk otorisasi
-          TG_CHAT_ID: ${{ env.PAYLOAD_CHAT_ID }} 
-
-      - name: Calculate Target Secret Name
-        id: secret_name_calc
-        if: env.IS_AUTH_COMMAND == 'true'
-        run: |
-          TARGET_NAME=""
-          # Cek jika ID payload sama dengan OWNER_ID
-          if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
-            TARGET_NAME="${{ env.OWNER_SECRET_NAME }}"
-          else
-            # Jika berbeda, gunakan nama unik
-            TARGET_NAME="${{ env.USER_SECRET_NAME }}"
-          fi
-          
-          echo "Target Secret Name: $TARGET_NAME"
-          echo "target_secret_name=$TARGET_NAME" >> $GITHUB_OUTPUT
-        shell: bash
-        
-      - name: Update GitHub Secret (Simpan Refresh Token)
-        # Hanya berjalan jika auth sukses dan refresh_token berhasil diekstrak
-        if: success() && steps.auth_script.outputs.refresh_token != ''
-        #uses: actions/labeler@v5 # Menggunakan action placeholder
-        
-        run: |
-          # Memerlukan GitHub CLI yang terinstal (biasanya sudah ada di runner)
-          NEW_REFRESH_TOKEN="${{ steps.auth_script.outputs.refresh_token }}"
-          TARGET_SECRET_NAME="${{ steps.secret_name_calc.outputs.target_secret_name }}"
-
-          echo "Memperbarui Secret: $TARGET_SECRET_NAME"
-          
-          # Gunakan GitHub CLI untuk memperbarui Secret (memerlukan secrets.GH_PAT)
-          gh secret set "$TARGET_SECRET_NAME" --body "$NEW_REFRESH_TOKEN" --repo ${{ github.repository }}
-        
-        env:
-          # GH_PAT harus berupa Personal Access Token dengan izin 'repo'
-          GH_TOKEN: ${{ vars.GH_PAT }}
-          
-      # Jika auth_command, kita ingin job berhenti di sini. Kita dapat menambahkan exit di akhir auth.sh
-      # atau kita lanjutkan dengan semua langkah di bawah, tapi dengan if: env.IS_AUTH_COMMAND != 'true'
-      
-# ------------------------------------------------------------------------------------------
 # --- CABANG UNTUK PEMROSESAN URL (DOWNLOAD & RELEASE) ---
 # ------------------------------------------------------------------------------------------
 
       - name: Grant permissions to APT cache
-        if: env.IS_AUTH_COMMAND != 'true'
         run: |
           sudo chown -R $USER:$USER /var/cache/apt
           sudo chown -R $USER:$USER /var/lib/apt
-# ... (lanjutkan dengan semua steps download & release Anda di sini,
-# pastikan setiap step memiliki if: env.IS_AUTH_COMMAND != 'true')
-# ...
-
+          
       - name: Cache APT packages
-        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
-        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
+        # HANYA JALANKAN jika URL mengandung 'mega.nz'
+        if: contains(env.PAYLOAD_URL, 'mega.nz')
         uses: actions/cache@v3
         with:
           path: |
@@ -123,11 +98,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-apt-
 
-
       - name: Disable installing package docs
-        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
-        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
-
+        if: contains(env.PAYLOAD_URL, 'mega.nz')
         run: |
           sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
           path-exclude /usr/share/doc/*
@@ -136,35 +108,27 @@ jobs:
           EOF
 
       - name: Install megatools
-        # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
-        if: env.IS_AUTH != 'true' && contains(env.PAYLOAD_URL, 'mega.nz')
-
+        if: contains(env.PAYLOAD_URL, 'mega.nz')
         run: |
-          #sudo apt-get update # Sudah tidak diperlukan pada runner baru
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
-
 
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true' && env.YOUTUBE_COOKIES_SECRET != ''
+        # Jika secret ada, buat file
+        if: env.YOUTUBE_COOKIES_SECRET != ''
         run: |
           echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
 
       - name: Cache venv
         id: cache-venv
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         uses: actions/cache@v3
         with:
           path: .venv
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
 
-
       - name: dependency pip
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         run: |
           python -m venv .venv
           source .venv/bin/activate
@@ -175,27 +139,23 @@ jobs:
           fi
 
       - name: Run Downloader Script
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         run: python main.py
         env:
           API_ID: ${{ vars.API_ID }}
           API_HASH: ${{ vars.API_HASH }}
           BOT_TOKEN: ${{ vars.BOT_TOKEN }}
           OWNER_ID: ${{ vars.OWNER_ID }}
-          # Kita tetap menggunakan payload.url di sini karena kita tahu itu adalah URL
           MEDIAFIRE_PAGE_URL: ${{ env.PAYLOAD_URL }}
           RCLONE_CONFIG: rclone.conf
-
-
+          # Secret Refresh Token harus diambil di sini, tetapi karena tidak ada logic
+          # pengambilan Secret di Python, Anda perlu menyesuaikan main.py
+          # atau mengirim Secret sebagai Environment Variable.
+          
       - name: Get Downloaded Filename
         id: get_filename
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         run: |
           if [ ! -f "downloaded_filename.txt" ]; then
           echo "Error: downloaded_filename.txt not found. Exiting."
-          # Mengatur job sebagai failed jika file tidak ditemukan
           exit 1
           fi
           FILE_NAME=$(cat downloaded_filename.txt | tr -d '\n')
@@ -204,8 +164,6 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: release-${{ github.run_number }}
@@ -216,8 +174,6 @@ jobs:
           files: ${{ steps.get_filename.outputs.file_name }}
 
       - name: Clean up apt cache
-        # HANYA JALANKAN jika BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
         run: |
           sudo rm -f /var/cache/apt/archives/lock
           sudo rm -f /var/lib/apt/lists/lock
