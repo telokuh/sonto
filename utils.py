@@ -338,8 +338,9 @@ def download_file_with_aria2c(urls, output_filename=None):
     setelah file mencapai ukuran penuh yang diharapkan.
     """
     print(f"Memulai unduhan {output_filename} dengan aria2c.")
-    if output_filename is None:
-       output_filename = name(urls)
+    for url in urls:
+      if output_filename is None:
+         output_filename = name(url)
 
     total_size = None 
     command = [
