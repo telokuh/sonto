@@ -58,12 +58,12 @@ async def send_to_github_actions(message, url_or_command_text, extra_payload=Non
         "event_type": GITHUB_EVENT_AUTH_INIT, 
         "client_payload": {
             "url": url_or_command_text, 
-            "sender": message.from_user.username or str(message.from_user.id),
+            "sender": str(message.from_user.id),
             **(extra_payload or {}) 
         }
     }
     
-    await message.reply_text(f"Mengirim event ke GitHub: `{url_or_command_text}`")
+    
 
     try:
         response = requests.post(
@@ -73,7 +73,7 @@ async def send_to_github_actions(message, url_or_command_text, extra_payload=Non
         )
 
         if response.status_code == 204:
-            await message.reply_text("📥 Memicu alur download di GitHub Actions...")
+            await message.reply_text("📥 Memicu alur download.")
         else:
             await message.reply_text(
                 f"❌ Gagal mengirim ke GitHub Actions. Status: {response.status_code}\nRespons: {response.text}"
