@@ -276,10 +276,11 @@ def download_with_yt_dlp(url, message_id=None):
     print("Mencoba mengunduh file dengan yt-dlp...")
     initial_message_id = send_telegram_message("⏳ **Memulai unduhan dengan `yt-dlp`...**")
     
-    # Kita akan menggunakan output template default (atau yang Anda tetapkan) 
-    # dan menambahkan flag untuk mencetak nama file terakhir.
-    # Nama file hasil AKHIR akan disimpan di sini
     final_filename = None
+    
+    # Template output: mencetak nama file yang sudah selesai di baris terakhir
+    FILENAME_PRINT_FLAG = '--print'
+    FILENAME_PRINT_TEMPLATE = 'after_move:filepath' # Ini yang paling akurat!
 
     command = [
         'yt-dlp', 
@@ -289,8 +290,8 @@ def download_with_yt_dlp(url, message_id=None):
         '--progress-template', '%(progress._percent_str)s',
         '--no-warnings', 
         '--rm-cache-dir',
-        # Menambahkan flag ini untuk mencetak nama file setelah unduhan selesai
-        '--print', 'filename',
+        # Flag untuk mencetak nama file setelah unduhan/move selesai
+        FILENAME_PRINT_FLAG, FILENAME_PRINT_TEMPLATE,
         '--output', '%(title)s.%(ext)s', 
         url
     ]
@@ -300,18 +301,18 @@ def download_with_yt_dlp(url, message_id=None):
         command.extend(['--cookies', cookies_file])
 
     try:
-        # Menggunakan subprocess.PIPE untuk menangkap output
         process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
         last_percent = -1
 
         while True:
             line = process.stdout.readline()
-            if not line: break
+            if not line: 
+                break
             
             stripped_line = line.strip()
 
-            if '%' in stripped_line:
-                # Menangani pembaruan progress
+            # 1. Menangani pembaruan progress
+            if stripped_line.endswith('%') and ' ' not in stripped_line:
                 try:
                     current_percent = int(float(stripped_line.replace('%', '')))
                     if current_percent > last_percent + 5 or current_percent == 100:
@@ -321,16 +322,19 @@ def download_with_yt_dlp(url, message_id=None):
                 except ValueError: 
                     continue
             
-            # Baris terakhir (setelah 100%) harus berisi nama file karena '--print filename'
-            # Kita asumsikan baris terakhir dari yt-dlp yang BUKAN progress adalah nama file
-            if process.poll() is not None and not stripped_line.endswith('%'):
+            # 2. Menangkap nama file
+            # Baris nama file adalah satu-satunya baris non-kosong yang TIDAK diakhiri dengan %
+            elif stripped_line:
                 final_filename = stripped_line
                 print(f"Nama file yt-dlp ditemukan: {final_filename}")
+
 
         process.wait()
         
         if process.returncode != 0:
-            raise Exception("yt-dlp gagal mengunduh file.")
+            # Baca output error jika proses gagal
+            stderr_output = process.stderr.read() if process.stderr else "Tidak ada detail error."
+            raise Exception(f"yt-dlp gagal mengunduh file. Output error: {stderr_output[:100]}...")
             
         print("Unduhan yt-dlp selesai.")
         
@@ -338,13 +342,13 @@ def download_with_yt_dlp(url, message_id=None):
             edit_telegram_message(initial_message_id, f"✅ **Unduhan `yt-dlp` selesai!**\nFile: `{final_filename}`")
             return final_filename
         else:
-            raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file.")
+            # Kasus ini seharusnya tidak terjadi dengan after_move:filepath
+            raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file dari output.")
 
     except Exception as e:
         print(f"yt-dlp gagal: {e}")
         send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {str(e)[:150]}...")
         return None
-
 
 
 def get_total_file_size_safe(url):
