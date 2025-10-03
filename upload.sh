@@ -68,7 +68,7 @@ echo "✅ Konfigurasi rclone berhasil dibuat."
 # =========================================================
 # 4. UPLOAD FILE MENGGUNAKAN RCLONE
 # =========================================================
-
+rclone config reconnect gdrive{5yYjZ}:
 echo "🚀 Memulai proses upload ke Google Drive di folder: ${DRIVE_UPLOAD_FOLDER}"
 
 # Gunakan flag --drive-scope untuk mengatasi masalah root directory (opsional tapi aman)
