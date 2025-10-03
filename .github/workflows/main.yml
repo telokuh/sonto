@@ -8,12 +8,27 @@ jobs:
   download-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      
-    # Definisi Variabel Bantu (Opsional, tapi membantu keterbacaan)
+      contents: write # Diperlukan untuk actions/checkout dan softprops/action-gh-release
+
+    # Definisi Variabel Bantu
     env:
       PAYLOAD_URL: ${{ github.event.client_payload.url }}
-      IS_AUTH: ${{ github.event.client_payload.url == 'auth' }}
+      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.chat_id }} # Dari bot.py /auth
+      
+      # OWNER_ID harus diset sebagai GitHub Variable atau Secret
+      OWNER_ID: ${{ vars.OWNER_ID }} 
+      
+      # Tentukan apakah ini adalah perintah auth
+      IS_AUTH_COMMAND: ${{ github.event.client_payload.url == 'auth' }}
+      
+      # Tentukan apakah ID pengirim adalah pemilik utama
+      IS_OWNER_AUTH: ${{ github.event.client_payload.chat_id == vars.OWNER_ID }}
+      
+      # Nama Secret utama
+      OWNER_SECRET_NAME: DRIVE_REFRESH_TOKEN_OWNER
+      
+      # Nama Secret untuk pengguna lain
+      USER_SECRET_NAME: DRIVE_REFRESH_TOKEN_USER_${{ github.event.client_payload.chat_id }}
 
     steps:
       - name: Checkout repository
@@ -23,26 +38,78 @@ jobs:
 # --- CABANG KHUSUS UNTUK PERINTAH /AUTH ---
 # ------------------------------------------------------------------------------------------
 
-      - name: Run Auth Script (auth.sh)
-        # HANYA JALANKAN jika payload.url adalah 'auth'
-        if: env.IS_AUTH == 'true'
-        run: |
-          echo "Perintah /auth diterima. Menjalankan auth.sh..."
-          # Pastikan file auth.sh ada di root repositori Anda dan dapat dieksekusi
-          bash auth.sh
-        # Jika Anda ingin job berhenti di sini setelah auth.sh, Anda bisa menambahkan 'exit 0' di auth.sh
+      - name: Install Dependencies for Auth Script
+        # Hanya perlu jq dan curl untuk auth
+        if: env.IS_AUTH_COMMAND == 'true'
+        run: sudo apt-get update && sudo apt-get install -y jq curl
 
+      - name: Make Auth Script Runnable and Execute
+        id: auth_script
+        if: env.IS_AUTH_COMMAND == 'true'
+        run: |
+          chmod +x ./auth.sh
+          # Jalankan skrip. Output refresh_token akan disalurkan ke steps.auth_script.outputs
+          ./auth.sh
+        shell: bash
+        env:
+          # Kredensial Google dan Telegram (Ambil dari Secrets/Vars GitHub)
+          CLIENT_ID: ${{ vars.CLIENT_ID }}
+          CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
+          TG_BOT_TOKEN: ${{ vars.BOT_TOKEN }}
+          # Kita gunakan Chat ID dari payload, bukan OWNER_ID, untuk otorisasi
+          TG_CHAT_ID: ${{ env.PAYLOAD_CHAT_ID }} 
+
+      - name: Calculate Target Secret Name
+        id: secret_name_calc
+        if: env.IS_AUTH_COMMAND == 'true'
+        run: |
+          TARGET_NAME=""
+          # Cek jika ID payload sama dengan OWNER_ID
+          if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
+            TARGET_NAME="${{ env.OWNER_SECRET_NAME }}"
+          else
+            # Jika berbeda, gunakan nama unik
+            TARGET_NAME="${{ env.USER_SECRET_NAME }}"
+          fi
+          
+          echo "Target Secret Name: $TARGET_NAME"
+          echo "target_secret_name=$TARGET_NAME" >> $GITHUB_OUTPUT
+        shell: bash
+        
+      - name: Update GitHub Secret (Simpan Refresh Token)
+        # Hanya berjalan jika auth sukses dan refresh_token berhasil diekstrak
+        if: success() && steps.auth_script.outputs.refresh_token != ''
+        #uses: actions/labeler@v5 # Menggunakan action placeholder
+        
+        run: |
+          # Memerlukan GitHub CLI yang terinstal (biasanya sudah ada di runner)
+          NEW_REFRESH_TOKEN="${{ steps.auth_script.outputs.refresh_token }}"
+          TARGET_SECRET_NAME="${{ steps.secret_name_calc.outputs.target_secret_name }}"
+
+          echo "Memperbarui Secret: $TARGET_SECRET_NAME"
+          
+          # Gunakan GitHub CLI untuk memperbarui Secret (memerlukan secrets.GH_PAT)
+          gh secret set "$TARGET_SECRET_NAME" --body "$NEW_REFRESH_TOKEN" --repo ${{ github.repository }}
+        
+        env:
+          # GH_PAT harus berupa Personal Access Token dengan izin 'repo'
+          GH_TOKEN: ${{ vars.GH_PAT }}
+          
+      # Jika auth_command, kita ingin job berhenti di sini. Kita dapat menambahkan exit di akhir auth.sh
+      # atau kita lanjutkan dengan semua langkah di bawah, tapi dengan if: env.IS_AUTH_COMMAND != 'true'
+      
 # ------------------------------------------------------------------------------------------
 # --- CABANG UNTUK PEMROSESAN URL (DOWNLOAD & RELEASE) ---
 # ------------------------------------------------------------------------------------------
 
       - name: Grant permissions to APT cache
-        # HANYA JALANKAN jika payload.url BUKAN 'auth'
-        if: env.IS_AUTH != 'true'
+        if: env.IS_AUTH_COMMAND != 'true'
         run: |
           sudo chown -R $USER:$USER /var/cache/apt
           sudo chown -R $USER:$USER /var/lib/apt
-
+# ... (lanjutkan dengan semua steps download & release Anda di sini,
+# pastikan setiap step memiliki if: env.IS_AUTH_COMMAND != 'true')
+# ...
 
       - name: Cache APT packages
         # HANYA JALANKAN jika BUKAN 'auth' DAN mengandung 'mega.nz'
