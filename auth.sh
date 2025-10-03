@@ -20,21 +20,32 @@ if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$TG_BOT_TOKEN" ] || [
     exit 1
 fi
 
+# ... (kode sebelumnya) ...
+
 # --- 2. KIRIM URL KE TELEGRAM ---
 
 echo ""
 echo "Mengirim URL otorisasi ke Telegram Chat ID: $TG_CHAT_ID"
 
+# 1. Pastikan AUTH_URL dibuat dengan tepat
 AUTH_URL="https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code&access_type=offline"
-# PERUBAHAN: Ganti format Markdown ke HTML dengan tag <pre>
-FORMATTED_AUTH_URL=$(printf "<b>Buka URL ini di peramban Anda:</b>\n\n<a href='%s'>link</a>" "$AUTH_URL")
 
+# 2. Buat Payload Teks Telegram dengan Bash Here-Document
+# Menggunakan tanda kutip tunggal ('EOF') mencegah ekspansi variabel di dalam dokumen.
+TELEGRAM_TEXT=$(cat <<EOF
+<b>Buka URL ini di peramban Anda:</b>
+
+<pre>${AUTH_URL}</pre>
+EOF
+)
 
 # Kirim URL dan dapatkan message_id dari respons
+# Menggunakan --data-urlencode untuk mengirim data teks secara aman
 SEND_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-    -d chat_id="${TG_CHAT_ID}" \
-    -d text="${FORMATTED_AUTH_URL}" \
-    -d parse_mode="HTML") # <--- PERUBAHAN UTAMA: parse_mode="HTML"
+    --data-urlencode "chat_id=${TG_CHAT_ID}" \
+    --data-urlencode "text=${TELEGRAM_TEXT}" \
+    --data-urlencode "parse_mode=HTML") # parse_mode="HTML" sudah benar
+    
 
 if [ "$(echo "$SEND_RESPONSE" | jq -r '.ok')" != "true" ]; then
     echo "❌ Gagal mengirim pesan ke Telegram."
