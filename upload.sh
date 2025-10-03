@@ -12,9 +12,9 @@ CLIENT_ID="$GOOGLE_CLIENT_ID"
 CLIENT_SECRET="$GOOGLE_CLIENT_SECRET"
 
 DRIVE_REMOTE_NAME="gdrive"
-DRIVE_UPLOAD_FOLDER="/uploads_bot_$(date +%Y%m%d)" 
+DRIVE_UPLOAD_FOLDER="/uploads_bot" 
 
-DOWNLOADED_FILE=$(cat downloaded_filename.txt) 
+DOWNLOADED_FILE=$FILENAME
 
 if [ -z "$REFRESH_TOKEN" ]; then
     echo "❌ ERROR: DRIVE_REFRESH_TOKEN tidak ditemukan. Upload dibatalkan."
