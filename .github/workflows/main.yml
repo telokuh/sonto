@@ -155,7 +155,7 @@ jobs:
 
 
       - name : upload 
-        run: python -v #upload.py
+        run: python upload.py
         shell: bash
         env:
           GH_TOKEN: ${{ vars.GH_PAT }} 
