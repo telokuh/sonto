@@ -62,7 +62,7 @@ jobs:
         if: env.PAYLOAD_SENDER == vars.OWNER_ID
         run: |
           # Ambil NILAI dari vars.DRIVER_TOKEN_OWNER dan setel ke ENV
-          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_REFRESH_TOKEN_OWNER }}" >> $GITHUB_ENV
+          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVE_REFRESH_TOKEN_OWNER }}" >> $GITHUB_ENV
         shell: bash
 
       - name: Set User Refresh Token
@@ -70,7 +70,7 @@ jobs:
         if: env.PAYLOAD_SENDER != vars.OWNER_ID
         run: |
           # Bangun kunci dinamis dan ambil NILAI dari vars
-          DYNAMIC_VALUE="${{ vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', env.PAYLOAD_SENDER)] }}"
+          DYNAMIC_VALUE="${{ vars[format('DRIVE_REFRESH_TOKEN_USER_{0}', env.PAYLOAD_SENDER)] }}"
           echo "DRIVE_REFRESH_TOKEN=$DYNAMIC_VALUE" >> $GITHUB_ENV
         shell: bash
         
