@@ -566,7 +566,7 @@ def downloader(url):
                     print("Unduhan selesai di folder sementara!")
                     break
                 
-                time.sleep(2)
+                time.sleep(1)
             else:
                 edit_telegram_message(initial_message_id, "❌ **Unduhan gagal atau melebihi batas waktu!**")
                 print("Unduhan gagal atau melebihi batas waktu.")
