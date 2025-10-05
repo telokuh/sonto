@@ -1,82 +1,89 @@
 name: Bot Automation Workflows
 
-# Trigger workflow ini saat event repository_dispatch dikirim dari bot.py (Pyrogram/Flask)
 on:
   repository_dispatch:
-    types: [new_url_received, refresh_token_received] # <<< Sekarang mendengarkan kedua event
+    types: [new_url_received, refresh_token_received]
 
 jobs:
-  # =========================================================================
-  # JOB 1: STORE REFRESH TOKEN (BARU)
-  # Dipicu oleh Flask /oauth_callback. Bertugas menyimpan Refresh Token.
-  # =========================================================================
   store_refresh_token:
-    # Hanya jalankan jika event type-nya adalah 'refresh_token_received'
     if: github.event.action == 'refresh_token_received'
     runs-on: ubuntu-latest
     
-    # Variabel dari payload dan GitHub Vars
     env:
       OWNER_ID: ${{ vars.OWNER_ID }} 
       PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender_chat_id }}
       NEW_REFRESH_TOKEN: ${{ github.event.client_payload.refresh_token }}
-      
       IS_OWNER_AUTH: ${{ github.event.client_payload.sender_chat_id == vars.OWNER_ID }}
       OWNER_SECRET_NAME: DRIVE_REFRESH_TOKEN_OWNER
       
     steps:
-      - name: Checkout Repository (Diperlukan untuk gh CLI)
+      - name: Checkout Repository (For gh CLI)
         uses: actions/checkout@v4
         
-      - name: Hitung Nama Secret Target
+      - name: Calculate Target Variable Name
         id: secret_name_calc
         run: |
           TARGET_NAME=""
-          # Jika chat ID sama, gunakan nama pemilik.
           if [ "${{ env.IS_OWNER_AUTH }}" == "true" ]; then
             TARGET_NAME="${{ env.OWNER_SECRET_NAME }}"
           else
-            # Jika user lain, buat Secret unik berdasarkan Chat ID
             TARGET_NAME="DRIVE_REFRESH_TOKEN_USER_${{ env.PAYLOAD_CHAT_ID }}"
           fi
           echo "target_secret_name=$TARGET_NAME" >> $GITHUB_OUTPUT
         shell: bash
         
-      - name: Perbarui GitHub Secret (Simpan Refresh Token)
+      - name: Update GitHub Variable (Store Refresh Token)
         run: |
           TARGET_SECRET_NAME="${{ steps.secret_name_calc.outputs.target_secret_name }}"
-
-          echo "✅ Menyimpan Refresh Token ke Secret: $TARGET_SECRET_NAME"
-          
-          # Gunakan GitHub CLI (gh) untuk memperbarui atau membuat Secret
+          echo "✅ Storing Refresh Token to Variable: $TARGET_SECRET_NAME"
+          # Use GitHub CLI (gh) to update or create Variable
           gh variable set "$TARGET_SECRET_NAME" --body "${{ env.NEW_REFRESH_TOKEN }}" --repo ${{ github.repository }}
-        
         env:
           GH_TOKEN: ${{ vars.GH_PAT }} 
           
-  # =========================================================================
-  # JOB 2: DOWNLOAD DAN RELEASE (DISESUAIKAN)
-  # Dipicu saat URL download diterima (new_url_received).
-  # Semua logika auth yang lama sudah DIHAPUS.
-  # =========================================================================
+# -----------------------------------------------------------------------------
+  
   download-and-release:
-    # Hanya jalankan jika event type-nya adalah 'new_url_received'
     if: github.event.action == 'new_url_received'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Diperlukan untuk checkout dan release
+      contents: write
       
-    # Definisi Variabel Bantu (Sekarang hanya untuk URL download)
     env:
       PAYLOAD_URL: ${{ github.event.client_payload.url }}
-      TOKEN: ${{ github.event.client_payload.sender == vars.OWNER_ID && vars.DRIVER_TOKEN_OWNER || vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}
+      PAYLOAD_SENDER: ${{ github.event.client_payload.sender }} # Tambahkan ini untuk akses mudah
+
     steps:
+      
+      # --- START: Setel Refresh Token Secara Kondisional (Perbaikan Stabilitas) ---
+      
+      - name: Set Owner Refresh Token
+        # Jika sender ID sama dengan OWNER_ID
+        if: env.PAYLOAD_SENDER == vars.OWNER_ID
+        run: |
+          # Ambil NILAI dari vars.DRIVER_TOKEN_OWNER dan setel ke ENV
+          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_TOKEN_OWNER }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Set User Refresh Token
+        # Jika sender ID berbeda
+        if: env.PAYLOAD_SENDER != vars.OWNER_ID
+        run: |
+          # Bangun kunci dinamis dan ambil NILAI dari vars
+          DYNAMIC_VALUE="${{ vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', env.PAYLOAD_SENDER)] }}"
+          echo "DRIVE_REFRESH_TOKEN=$DYNAMIC_VALUE" >> $GITHUB_ENV
+        shell: bash
+        
+      # --- END: Setel Refresh Token Secara Kondisional ---
+      
       - name: Checkout repository
         uses: actions/checkout@v4
 
-# ------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # --- CABANG UNTUK PEMROSESAN URL (DOWNLOAD & RELEASE) ---
-# ------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+      
+      # ... (Steps untuk cache dan install megatools dihilangkan untuk ringkas) ...
 
       - name: Grant permissions to APT cache
         run: |
@@ -84,7 +91,6 @@ jobs:
           sudo chown -R $USER:$USER /var/lib/apt
           
       - name: Cache APT packages
-        # HANYA JALANKAN jika URL mengandung 'mega.nz'
         if: contains(env.PAYLOAD_URL, 'mega.nz')
         uses: actions/cache@v3
         with:
@@ -95,25 +101,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-apt-
 
-      - name: Disable installing package docs
-        #if: contains(env.PAYLOAD_URL, 'mega.nz')
-        run: |
-          sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc > /dev/null << 'EOF'
-          path-exclude /usr/share/doc/*
-          path-exclude /usr/share/man/*
-          path-exclude /usr/share/info/*
-          EOF
-
       - name: Install megatools
         if: contains(env.PAYLOAD_URL, 'mega.nz')
         run: |
           sudo DEBIAN_FRONTEND=noninteractive apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
-
+          
       - name: Create YouTube cookies file from secret
         env:
           YOUTUBE_COOKIES_SECRET: ${{ secrets.YOUTUBE_COOKIES }}
-        # Jika secret ada, buat file
         if: env.YOUTUBE_COOKIES_SECRET != ''
         run: |
           echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
@@ -130,7 +126,6 @@ jobs:
           python -m venv .venv
           source .venv/bin/activate
           echo ".venv/bin" >> $GITHUB_PATH
-          # Skip pip install if venv cache is found
           if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
           pip install -r requirements.txt
           fi
@@ -144,9 +139,8 @@ jobs:
           OWNER_ID: ${{ vars.OWNER_ID }}
           MEDIAFIRE_PAGE_URL: ${{ env.PAYLOAD_URL }}
           RCLONE_CONFIG: rclone.conf
-          # Secret Refresh Token harus diambil di sini, tetapi karena tidak ada logic
-          # pengambilan Secret di Python, Anda perlu menyesuaikan main.py
-          # atau mengirim Secret sebagai Environment Variable.
+          # Token sekarang diakses dari $GITHUB_ENV
+          DRIVE_REFRESH_TOKEN: ${{ env.DRIVE_REFRESH_TOKEN }} 
           
       - name: Get Downloaded Filename
         id: get_filename
@@ -159,28 +153,14 @@ jobs:
           echo "file_name=$FILE_NAME" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Set Owner
-        if: github.event.client_payload.sender == vars.OWNER_ID
-        run: |
-          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_TOKEN_OWNER }}" >> $GITHUB_ENV
-        shell: bash
 
-      - name: Set User Refresh Token
-        if: github.event.client_payload.sender != vars.OWNER_ID
-        run: |
-          # Bangun kunci dinamis dan ambil NILAI dari vars
-          DYNAMIC_KEY="DRIVER_REFRESH_TOKEN_USER_${{ github.event.client_payload.sender }}"
-          DYNAMIC_VALUE="${{ vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}"
-          echo "DRIVE_REFRESH_TOKEN=$DYNAMIC_VALUE" >> $GITHUB_ENV
-          echo "✅ Token User (${DYNAMIC_KEY}) berhasil dimuat."
-        shell: bash
       - name : upload 
-        run: python upload.py
+        run: python -v #upload.py
         shell: bash
         env:
-          # Pastikan Anda punya GH_PAT, GOOGLE_CLIENT_ID, dan GOOGLE_CLIENT_SECRET di secrets
           GH_TOKEN: ${{ vars.GH_PAT }} 
-          DRIVE_REFRESH_TOKEN: ${{ github.event.client_payload.sender == vars.OWNER_ID && vars.DRIVER_TOKEN_OWNER || vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}
+          # Token sekarang diakses dari $GITHUB_ENV
+          DRIVE_REFRESH_TOKEN: ${{ env.DRIVE_REFRESH_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ vars.CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
           FILENAME: ${{ steps.get_filename.outputs.file_name }}
