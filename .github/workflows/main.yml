@@ -162,7 +162,7 @@ jobs:
       - name: Set Owner
         if: github.event.client_payload.sender == vars.OWNER_ID
         run: |
-           echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_TOKEN_OWNER }}" >> $GITHUB_ENV
+          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_TOKEN_OWNER }}" >> $GITHUB_ENV
         shell: bash
 
       - name: Set User Refresh Token
