@@ -52,7 +52,7 @@ def main_downloader(url):
     if downloaded_filename:
         with open("downloaded_filename.txt", "w") as f:
             f.write(downloaded_filename)
-        send_telegram_message(f"✅ **Selesai!**\nFile `{downloaded_filename}` berhasil diunduh dan sedang dibuatkan rilis di GitHub.")
+        
     else:
         print(f"{downloaded_filename} Tidak dapat menemukan URL unduhan. Proses dihentikan.")
         send_telegram_message(f"{downloaded_filename} ❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
