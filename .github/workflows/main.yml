@@ -166,7 +166,7 @@ jobs:
         env:
           # Pastikan Anda punya GH_PAT, GOOGLE_CLIENT_ID, dan GOOGLE_CLIENT_SECRET di secrets
           GH_TOKEN: ${{ vars.GH_PAT }} 
-          DRIVE_REFRESH_TOKEN: ${{ vars[env.TOKEN] }}
+          DRIVE_REFRESH_TOKEN: ${{ github.event.client_payload.sender == vars.OWNER_ID && vars.DRIVER_TOKEN_OWNER || vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}
           GOOGLE_CLIENT_ID: ${{ vars.CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
           FILENAME: ${{ steps.get_filename.outputs.file_name }}
