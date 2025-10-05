@@ -459,18 +459,21 @@ def download_file_with_aria2c(urls, output_filename):
 
 def downloader(url):
     """
-    Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium
-    dan alat lain yang sesuai, dengan notifikasi Telegram.
+    Mengunduh file GoFile, Mediafire, dan SourceForge.
+    File yang diunduh (via Selenium) akan dipindahkan ke direktori root (sama dengan perilaku aria2c).
     """
     print("Memulai unduhan. Menunggu unduhan selesai secara dinamis...")
 
     initial_message_id = None
-    download_dir = os.path.join(os.getcwd(), "downloads")
-    if not os.path.exists(download_dir):
-        os.makedirs(download_dir)
-
+    
+    # PERUBAHAN 1: Tetapkan direktori unduhan ke direktori kerja saat ini (root)
+    # Gunakan direktori sementara untuk unduhan browser, lalu pindahkan
+    temp_download_dir = tempfile.mkdtemp()
+    
+    # Inisialisasi driver dan preferensi browser
     chrome_prefs = {
-        "download.default_directory": download_dir,
+        # Gunakan direktori sementara sebagai tempat unduhan Chrome
+        "download.default_directory": temp_download_dir, 
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
@@ -490,12 +493,15 @@ def downloader(url):
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         
-        # Logika khusus untuk SourceForge
+        # --- Logika SourceForge (Sudah Benar, karena menggunakan aria2c) ---
         if "sourceforge" in url:
+            # Karena SourceForge menggunakan `download_file_with_aria2c`, 
+            # dan `download_file_with_aria2c` menyimpan file di CWD (root), 
+            # bagian ini tidak perlu diubah.
+            # ... (Logika SourceForge Anda) ...
             print("Mengunduh dari SourceForge...")
             initial_message_id = send_telegram_message("⏳ **Memulai unduhan dari SourceForge...**")
             
-            # Mendapatkan URL cermin dan nama file
             mirror_url = source_url(url)
             driver.get(mirror_url)
             
@@ -516,11 +522,10 @@ def downloader(url):
             
             ahref = download_button.get_attribute('href')
             
-            # Membuat daftar URL unduhan dengan setiap cermin
             download_urls = [set_url(ahref, 'use_mirror', mirror_id) for mirror_id in li_id]
             
-            # Panggil aria2c untuk memulai unduhan
             edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{aname}`")
+            # `download_file_with_aria2c` menyimpan langsung di root CWD
             downloaded_filename = download_file_with_aria2c(download_urls, aname)
             
             if downloaded_filename:
@@ -528,18 +533,17 @@ def downloader(url):
             else:
                 edit_telegram_message(initial_message_id, "❌ **SourceForge: Unduhan gagal atau melebihi batas waktu!**")
             
-            return downloaded_filename # Kembali dan selesaikan eksekusi
+            return downloaded_filename 
 
-        # Logika umum untuk GoFile dan Mediafire
+        # --- Logika umum untuk GoFile dan Mediafire ---
         else:
             initial_message_id = send_telegram_message("⬇️ **Mulai mengunduh...**")
             driver.get(url)
+            
             if "gofile" in url:
                 download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
             elif "mediafire" in url:
                 download_button_selector = "#downloadButton"
-
-            
             else:
                 raise ValueError("URL tidak didukung oleh downloader ini.")
 
@@ -549,18 +553,17 @@ def downloader(url):
             
             driver.execute_script("arguments[0].click();", download_button)
             time.sleep(1)
-            print(download_button.get_attribute('outerHTML'))
-            print("hmm")
-
+            
             start_time = time.time()
             timeout = 300
             
-            # Menunggu unduhan selesai
+            # Menunggu unduhan selesai (di temp_download_dir)
             while time.time() - start_time < timeout:
-                is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(download_dir))
+                # Cek apakah ada file yang sedang diunduh (file sementara Chrome)
+                is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(temp_download_dir))
                 
                 if not is_downloading:
-                    print("Unduhan selesai!")
+                    print("Unduhan selesai di folder sementara!")
                     break
                 
                 time.sleep(2)
@@ -569,11 +572,17 @@ def downloader(url):
                 print("Unduhan gagal atau melebihi batas waktu.")
                 return None
 
-            list_of_files = [f for f in os.listdir(download_dir) if not f.endswith(('.crdownload', '.tmp'))]
+            # PERUBAHAN 2: Pindahkan file dari folder sementara ke root CWD
+            list_of_files = [f for f in os.listdir(temp_download_dir) if not f.endswith(('.crdownload', '.tmp'))]
             if list_of_files:
-                latest_file = max([os.path.join(download_dir, f) for f in list_of_files], key=os.path.getctime)
-                downloaded_filename = os.path.basename(latest_file)
-                print(f"File berhasil diunduh: {downloaded_filename}")
+                # Ambil file yang terbaru (file yang baru saja selesai diunduh)
+                latest_file_path = max([os.path.join(temp_download_dir, f) for f in list_of_files], key=os.path.getctime)
+                downloaded_filename = os.path.basename(latest_file_path)
+                
+                # Pindahkan file ke direktori root (CWD)
+                shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
+                
+                print(f"File berhasil diunduh dan dipindahkan ke root: {downloaded_filename}")
                 edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}`")
             else:
                 edit_telegram_message(initial_message_id, "❌ **Gagal menemukan file yang diunduh.**")
@@ -588,4 +597,5 @@ def downloader(url):
     finally:
         if driver:
             driver.quit()
+        
         return downloaded_filename
