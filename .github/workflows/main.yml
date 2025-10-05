@@ -161,7 +161,7 @@ jobs:
 
 
       - name : upload 
-        run: python -v #upload.py
+        run: python upload.py
         shell: bash
         env:
           # Pastikan Anda punya GH_PAT, GOOGLE_CLIENT_ID, dan GOOGLE_CLIENT_SECRET di secrets
