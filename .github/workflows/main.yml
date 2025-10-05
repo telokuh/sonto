@@ -62,7 +62,7 @@ jobs:
         if: env.PAYLOAD_SENDER == vars.OWNER_ID
         run: |
           # Ambil NILAI dari vars.DRIVER_TOKEN_OWNER dan setel ke ENV
-          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_TOKEN_OWNER }}" >> $GITHUB_ENV
+          echo "DRIVE_REFRESH_TOKEN=${{ vars.DRIVER_REFRESH_TOKEN_OWNER }}" >> $GITHUB_ENV
         shell: bash
 
       - name: Set User Refresh Token
