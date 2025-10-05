@@ -546,8 +546,9 @@ def downloader(url):
             download_button = WebDriverWait(driver, 20).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
             )
-            download_button.click()
-            time.sleep(2)
+            
+            driver.execute_script("arguments[0].click();", download_button)
+            time.sleep(1)
             print(download_button.get_attribute('outerHTML'))
             print("hmm")
 
