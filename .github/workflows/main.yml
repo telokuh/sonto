@@ -69,10 +69,7 @@ jobs:
     # Definisi Variabel Bantu (Sekarang hanya untuk URL download)
     env:
       PAYLOAD_URL: ${{ github.event.client_payload.url }}
-      
-      PAYLOAD_CHAT_ID: ${{ github.event.client_payload.sender }} 
-      OWNER_ID: ${{ vars.OWNER_ID }} 
-      IS_OWNER_AUTH: ${{ github.event.client_payload.sender == vars.OWNER_ID }}
+      TOKEN: ${{ github.event.client_payload.sender == vars.OWNER_ID && vars.DRIVER_TOKEN_OWNER || vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -163,29 +160,13 @@ jobs:
         shell: bash
 
 
-
-      # --- LANKAH BARU UNTUK MENGAMBIL TOKEN DAN UPLOAD ---
-      - name: environment upload
-        id: upl 
-        run: |
-          if [ "$PAYLOAD_CHAT_ID" = "$OWNER_ID" ]; then
-          echo "token=${{ vars.DRIVER_REFRESH_TOKEN_OWNER }}" >> $GITHUB_OUTPUT
-          else
-          echo "token=${{ vars[format('DRIVER_REFRESH_TOKEN_USER_{0}', github.event.client_payload.sender)] }}" >> $GITHUB_OUTPUT
-          fi
-          
-          
-      
-        shell: bash
-
-
       - name : upload 
         run: python -v #upload.py
         shell: bash
         env:
           # Pastikan Anda punya GH_PAT, GOOGLE_CLIENT_ID, dan GOOGLE_CLIENT_SECRET di secrets
           GH_TOKEN: ${{ vars.GH_PAT }} 
-          DRIVE_REFRESH_TOKEN: ${{ steps.upl.outputs.token }}
+          DRIVE_REFRESH_TOKEN: ${{ env.TOKEN }}
           GOOGLE_CLIENT_ID: ${{ vars.CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ vars.CLIENT_SECRET }}
           FILENAME: ${{ steps.get_filename.outputs.file_name }}
