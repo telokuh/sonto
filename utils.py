@@ -428,7 +428,7 @@ def download_file_with_aria2c(urls, output_filename):
                 if (total_size is not None and current_size >= total_size) or not os.path.exists(aria2_temp_file):
                     print(f"File {output_filename} selesai. Menghentikan aria2c...")
                     process.terminate()
-                    time.sleep(1)
+                    time.sleep(3)
                     if process.poll() is None:
                         process.kill()
                     return output_filename
@@ -440,7 +440,7 @@ def download_file_with_aria2c(urls, output_filename):
                 print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
                 return None
             
-            time.sleep(2)
+            time.sleep(3)
 
         print("Waktu habis. Menghentikan aria2c.")
         if process and process.poll() is None:
