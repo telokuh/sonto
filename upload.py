@@ -1,19 +1,36 @@
 import os
 import sys
 import time
-import mimetypes # Untuk menentukan MIME Type file
+import mimetypes 
+import hashlib # Untuk menghitung MD5 checksum
 from oauth2client.client import OAuth2Credentials 
 from googleapiclient.discovery import build 
 from googleapiclient.http import MediaFileUpload 
-from httplib2 import Http # Penting untuk proses refresh token
+from httplib2 import Http 
 from googleapiclient.errors import HttpError
 from googleapiclient.errors import ResumableUploadError
+
+# =========================================================
+# Fungsi Bantuan: MD5 Checksum
+# =========================================================
+def calculate_md5(file_path):
+    """Menghitung MD5 checksum dari file lokal."""
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            # Baca file dalam potongan 4KB untuk efisiensi
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    except Exception as e:
+        print(f"❌ Gagal menghitung MD5 checksum: {e}")
+        return None
 
 # =========================================================
 # 1. KONFIGURASI DAN INISIALISASI
 # =========================================================
 
-# Ambil kredensial dari Environment Variables yang disuntikkan di main.yml
+# Ambil kredensial dari Environment Variables
 REFRESH_TOKEN = os.environ.get('DRIVE_REFRESH_TOKEN')
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
@@ -35,15 +52,15 @@ if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
     print("❌ ERROR: Kredensial Google Drive tidak lengkap di environment.")
     sys.exit(1)
 
-# Folder Drive Tujuan (Buat folder unik per hari)
-DRIVE_UPLOAD_FOLDER_NAME = "my-drive" 
+# Folder Drive Tujuan
+DRIVE_UPLOAD_FOLDER_NAME = "my-drive-upload" 
 
 
 # =========================================================
-# 2. OTENTIKASI & REFRESH TOKEN (Solusi Stabil)
+# 2. OTENTIKASI & REFRESH TOKEN
 # =========================================================
 
-# 2.1 Buat objek Credentials yang benar dari Refresh Token
+# 2.1 Buat objek Credentials dari Refresh Token
 credentials = OAuth2Credentials(
     access_token=None,
     client_id=CLIENT_ID,
@@ -54,7 +71,7 @@ credentials = OAuth2Credentials(
     user_agent='GH-Actions-DriveUploader'
 )
 
-# 2.2 Memperbarui Access Token (Perbaikan 'NoneType' object is not callable)
+# 2.2 Memperbarui Access Token
 print("⚡ Memperbarui Access Token menggunakan Refresh Token...")
 
 http_pool = Http() 
@@ -73,7 +90,7 @@ drive_service = build('drive', 'v3', http=http_auth)
 print("✅ Autentikasi Drive berhasil. Siap upload!")
 
 # =========================================================
-# 3. LOGIKA UPLOAD (Resumable Upload)
+# 3. LOGIKA UPLOAD (Resumable Upload & Verifikasi MD5)
 # =========================================================
 
 def get_or_create_folder(service, folder_name, parent_id=None):
@@ -105,35 +122,44 @@ try:
     # 3.1 Cari atau buat folder tujuan
     target_folder_id = get_or_create_folder(drive_service, DRIVE_UPLOAD_FOLDER_NAME)
 
-    # 3.2 Tentukan MIME Type berdasarkan ekstensi file
+    # 3.2 Tentukan MIME Type
     MIME_TYPE, _ = mimetypes.guess_type(DOWNLOADED_FILE)
     if not MIME_TYPE:
-        # Fallback jika tipe tidak dapat ditebak
         MIME_TYPE = 'application/octet-stream' 
     
     print(f"💡 Ditemukan MIME Type: {MIME_TYPE}")
 
-    # 3.3 Metadata File
+    # 3.3 Hitung MD5 Lokal (LANGKAH KRITIS)
+    LOCAL_MD5 = calculate_md5(DOWNLOADED_FILE)
+    if not LOCAL_MD5:
+        print("❌ Upload dibatalkan karena gagal menghitung MD5 lokal.")
+        sys.exit(1)
+    
+    print(f"💡 MD5 Checksum File Lokal: {LOCAL_MD5}")
+
+
+    # 3.4 Metadata File
     file_metadata = {
         'name': DOWNLOADED_FILE,
         'parents': [target_folder_id] 
     }
 
-    # 3.4 Buat MediaFileUpload object dengan resumable=True (Solusi Redirect Error)
+    # 3.5 Buat MediaFileUpload object (resumable=True)
     media = MediaFileUpload(
         DOWNLOADED_FILE, 
         mimetype=MIME_TYPE, 
         resumable=True
     )
 
-    # 3.5 Buat Permintaan Upload
+    # 3.6 Buat Permintaan Upload
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id,webViewLink,webContentLink' # Meminta link untuk notifikasi
+        # Meminta id, link, DAN md5Checksum untuk verifikasi
+        fields='id,webViewLink,webContentLink,md5Checksum' 
     )
 
-    # 3.6 Mulai Upload dan Tangani Chunks
+    # 3.7 Mulai Upload dan Tangani Chunks
     response = None
     print(f'🚀 Memulai upload Resumable untuk: {DOWNLOADED_FILE}...')
     
@@ -143,16 +169,31 @@ try:
             if status:
                 progress = int(status.progress() * 100)
                 # Batasi cetakan progress
-                if progress % 10 == 0:
+                if progress % 10 == 0 and progress > 0:
                     print(f'   Uploaded {progress}%')
         except ResumableUploadError as e:
-            # Tambahkan penanganan error khusus untuk Resumable Upload
-            print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 5 detik...: {e}")
-            time.sleep(5) # Jeda sebelum mencoba lagi
+            # Coba ulangi jika ada error koneksi / resumable
+            print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
+            time.sleep(10) 
+        except Exception as e:
+            # Tangani error umum di tengah proses upload
+            print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
+            time.sleep(10)
+            
+    # --- LANGKAH VERIFIKASI AKHIR ---
+    DRIVE_MD5 = response.get('md5Checksum')
 
     print(f'✅ Upload complete! File ID: {response.get("id")}')
     print(f'🔗 Link Web Drive: {response.get("webViewLink")}')
 
+    if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
+        print(f"👍 VERIFIKASI BERHASIL: MD5 Drive ({DRIVE_MD5}) cocok dengan MD5 Lokal. File APK UTUH.")
+    else:
+        print("🚨 VERIFIKASI GAGAL: MD5 Checksum tidak cocok!")
+        print(f"   Lokal: {LOCAL_MD5}, Drive: {DRIVE_MD5}")
+        print("   File di Drive KORUP. Upload GAGAL.")
+        sys.exit(1) # Keluar dengan error agar proses CI/CD gagal
+        
 except HttpError as e:
     print(f"❌ Gagal saat upload file (HTTP Error): {e}")
     sys.exit(1)
