@@ -1,18 +1,22 @@
-FROM python:3.10-slim
+# Bagian 1: Base Image
+# Menggunakan image resmi dari Deno yang sudah terinstal runtime Deno
+FROM denoland/deno:latest
 
+# Bagian 2: Direktori Kerja
 # Menetapkan direktori kerja di dalam container
 WORKDIR /app
 
-# Menyalin file requirements.txt ke dalam container
-# File ini berisi daftar pustaka yang dibutuhkan bot
-COPY oke.txt .
-
-# Menginstal pustaka yang terdaftar di requirements.txt
-RUN pip install --no-cache-dir -r oke.txt
-
-# Menyalin semua file lain dari direktori lokal ke dalam container
-# Ini termasuk bot.py dan .env
+# Bagian 3: Menyalin File
+# Menyalin semua file dari direktori lokal (termasuk bot.ts) ke dalam container
+# Jika kamu hanya ingin menyalin bot.ts: COPY bot.ts .
 COPY . .
+
+# Bagian 4: Port (Jika bot-mu adalah server web)
+# Mengekspos port 8000 (sesuaikan jika bot Deno-mu menggunakan port lain)
 EXPOSE 8000
-# Menjalankan skrip bot saat container dijalankan
-CMD ["python", "bot.py"]
+
+# Bagian 5: Perintah Jalankan
+# Menjalankan skrip bot.ts menggunakan Deno runtime.
+# PENTING: Kamu harus menambahkan flag izin yang sesuai.
+# Contoh: --allow-net (untuk koneksi jaringan), --allow-env (untuk membaca .env)
+CMD ["deno", "run", "-A", "bot.ts"]
