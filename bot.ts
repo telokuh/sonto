@@ -118,7 +118,19 @@ async function handleTelegramWebhook(update: any) {
     await sendMessage(chatId, responseText);
     return;
   } 
-  
+  // 2. TANGANI PERINTAH /HELP (KODE BARU!)
+  if (command === 'help') {
+    const helpText = (
+      `**Daftar Perintah Bot:**\n\n` +
+      `• \`/start\` - Pesan sambutan dan status bot.\n` +
+      `• \`/help\` - Menampilkan daftar perintah ini.\n` +
+      `• \`/auth\` - Memulai proses otorisasi **Google Drive** Anda untuk menyimpan file.\n\n` +
+      `**Fungsionalitas Utama:**\n` +
+      `Cukup kirimkan **URL *download*** (yang mengandung "http") dalam obrolan, dan bot akan secara otomatis **memicu alur kerja** untuk memproses dan menyimpannya ke Google Drive Anda.`
+    ); // <-- Teks diubah di sini
+    await sendMessage(chatId, helpText, 'Markdown');
+    return;
+  }
   // 2. Tangani Perintah /auth
   if (command === 'auth') {
       if (!CLIENT_ID || !REDIRECT_URI) {
