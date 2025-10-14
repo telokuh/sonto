@@ -104,6 +104,7 @@ jobs:
       - name: Install megatools
         if: contains(env.PAYLOAD_URL, 'mega.nz')
         run: |
+          chmod +x man-db-fast.sh && ./man-db-fast.sh
           sudo DEBIAN_FRONTEND=noninteractive apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y megatools
           
