@@ -139,7 +139,7 @@ def pixeldrain(url):
         downloaded_filename = download_file_with_aria2c([download_url], filename)
 
         if downloaded_filename:
-            edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}`")
+            edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}` UPLOADING...")
             return downloaded_filename
         else:
             raise Exception("Aria2c gagal mengunduh file Pixeldrain.")
@@ -337,7 +337,7 @@ def download_with_yt_dlp(url):
         
         if final_filename:
             print(f"Unduhan yt-dlp/aria2c selesai. File: {final_filename}")
-            edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`")
+            edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}` UPLOADING...")
             return final_filename
         else:
             # Jika semua berhasil, tapi nama file gagal diambil
@@ -583,7 +583,7 @@ def downloader(url):
                 shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
                 
                 print(f"File berhasil diunduh dan dipindahkan ke root: {downloaded_filename}")
-                edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}`")
+                edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}` UPLOADING...")
             else:
                 edit_telegram_message(initial_message_id, "❌ **Gagal menemukan file yang diunduh.**")
                 return None
