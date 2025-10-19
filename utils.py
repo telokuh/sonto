@@ -348,6 +348,7 @@ def download_with_yt_dlp(url):
         'yt-dlp', 
         '--no-warnings', 
         '--rm-cache-dir',
+        '--allow-unplayable-formats',
         '--external-downloader', 'aria2c',
         '--external-downloader-args', '-x16 -s16 -k1M',
         '--print', 'after_move:filepath',
