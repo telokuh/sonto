@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-import mimetypes 
+import mimetypes
 import hashlib
 import requests # Diperlukan untuk notifikasi Telegram
 
