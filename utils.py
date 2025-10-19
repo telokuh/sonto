@@ -158,7 +158,7 @@ def download_file_with_aria2c(urls, output_filename):
     """Mengunduh file menggunakan aria2c."""
     print(f"Memulai unduhan {output_filename} dengan aria2c.")
 
-    total_size = None 
+    total_size = None
     command = [
         'aria2c', '--allow-overwrite', '--file-allocation=none',
         '--console-log-level=warn', '--summary-interval=0',
