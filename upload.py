@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.errors import ResumableUploadError
 
 # =========================================================
-# FUNGSI BANTUAN TELEGRAM (Diduplikasi untuk skrip independen)
+# FUNGSI BANTUAN TELEGRAM (Diperlukan di skrip ini)
 # =========================================================
 
 # Ambil token bot dan chat ID dari environment variables
@@ -45,6 +45,7 @@ def calculate_md5(file_path):
     hash_md5 = hashlib.md5()
     try:
         with open(file_path, "rb") as f:
+            # Baca file dalam potongan 4KB untuk efisiensi
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
@@ -59,7 +60,7 @@ def calculate_md5(file_path):
 REFRESH_TOKEN = os.environ.get('DRIVE_REFRESH_TOKEN')
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
-DRIVE_UPLOAD_FOLDER_NAME = "my-drive-upload" 
+DRIVE_UPLOAD_FOLDER_NAME = "my-drive-upload"
 
 # Tentukan file yang akan diunggah
 try:
@@ -101,17 +102,17 @@ credentials = OAuth2Credentials(
 
 print("⚡ Memperbarui Access Token menggunakan Refresh Token...")
 
-http_pool = Http() 
+http_pool = Http()
 
 try:
-    credentials.refresh(http=http_pool) 
+    credentials.refresh(http=http_pool)
 except Exception as e:
     error_msg = f"❌ Gagal memperbarui token. Pastikan Scope sudah 'drive' penuh dan Token valid: {e}"
     print(error_msg)
     send_telegram_message(f"❌ **Upload GAGAL!**\n\n{error_msg[:150]}...")
     sys.exit(1)
 
-http_auth = credentials.authorize(http_pool) 
+http_auth = credentials.authorize(http_pool)
 drive_service = build('drive', 'v3', http=http_auth)
 
 print("✅ Autentikasi Drive berhasil. Siap upload!")
@@ -152,8 +153,8 @@ try:
     # 3.2 Tentukan MIME Type
     MIME_TYPE, _ = mimetypes.guess_type(DOWNLOADED_FILE)
     if not MIME_TYPE:
-        MIME_TYPE = 'application/octet-stream' 
-    
+        MIME_TYPE = 'application/octet-stream'
+
     # 3.3 Hitung MD5 Lokal
     LOCAL_MD5 = calculate_md5(DOWNLOADED_FILE)
     if not LOCAL_MD5:
@@ -164,13 +165,13 @@ try:
     # 3.4 Metadata File
     file_metadata = {
         'name': DOWNLOADED_FILE,
-        'parents': [target_folder_id] 
+        'parents': [target_folder_id]
     }
 
     # 3.5 Buat MediaFileUpload object
     media = MediaFileUpload(
-        DOWNLOADED_FILE, 
-        mimetype=MIME_TYPE, 
+        DOWNLOADED_FILE,
+        mimetype=MIME_TYPE,
         resumable=True
     )
 
@@ -178,7 +179,7 @@ try:
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id,webViewLink,webContentLink,md5Checksum' 
+        fields='id,webViewLink,webContentLink,md5Checksum'
     )
 
     # 3.7 Mulai Upload dan Tangani Chunks
@@ -189,10 +190,10 @@ try:
         try:
             status, response = request.next_chunk()
             if status and int(status.progress() * 100) % 10 == 0 and int(status.progress() * 100) > 0:
-                 print(f'   Uploaded {int(status.progress() * 100)}%')
+                 print(f'    Uploaded {int(status.progress() * 100)}%')
         except ResumableUploadError as e:
             print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
-            time.sleep(10) 
+            time.sleep(10)
         except Exception as e:
             print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
