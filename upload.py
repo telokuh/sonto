@@ -5,10 +5,10 @@ import mimetypes
 import hashlib
 import requests # Diperlukan untuk notifikasi Telegram
 
-from oauth2client.client import OAuth2Credentials 
-from googleapiclient.discovery import build 
-from googleapiclient.http import MediaFileUpload 
-from httplib2 import Http 
+from oauth2client.client import OAuth2Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from httplib2 import Http
 from googleapiclient.errors import HttpError
 from googleapiclient.errors import ResumableUploadError
 
