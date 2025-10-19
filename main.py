@@ -47,7 +47,7 @@ def main_downloader(url):
         else:
             # Fallback ke aria2c jika yt-dlp gagal
             print("yt-dlp gagal. Mencoba dengan aria2c sebagai cadangan...")
-            downloaded_filename = download_file_with_aria2c(url)
+            downloaded_filename = download_file_with_aria2c([url], url)
     
     if downloaded_filename:
         with open("downloaded_filename.txt", "w") as f:
