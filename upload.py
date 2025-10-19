@@ -1,15 +1,42 @@
 import os
 import sys
 import time
-import mimetypes 
-import hashlib # Untuk menghitung MD5 checksum
-from oauth2client.client import OAuth2Credentials 
-from googleapiclient.discovery import build 
-from googleapiclient.http import MediaFileUpload 
-from httplib2 import Http 
+import mimetypes 
+import hashlib
+import requests # Diperlukan untuk notifikasi Telegram
+
+from oauth2client.client import OAuth2Credentials 
+from googleapiclient.discovery import build 
+from googleapiclient.http import MediaFileUpload 
+from httplib2 import Http 
 from googleapiclient.errors import HttpError
 from googleapiclient.errors import ResumableUploadError
 
+# =========================================================
+# FUNGSI BANTUAN TELEGRAM (Diduplikasi untuk skrip independen)
+# =========================================================
+
+# Ambil token bot dan chat ID dari environment variables
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID = os.environ.get("OWNER_ID")
+
+def send_telegram_message(message_text):
+    """Fungsi untuk mengirim pesan ke Telegram."""
+    if not BOT_TOKEN or not OWNER_ID:
+        print("Peringatan: BOT_TOKEN atau OWNER_ID tidak diatur. Notifikasi Telegram dinonaktifkan.")
+        return None
+    
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": OWNER_ID,
+        "text": message_text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Gagal mengirim pesan Telegram: {e}")
+        
 # =========================================================
 # Fungsi Bantuan: MD5 Checksum
 # =========================================================
@@ -18,7 +45,6 @@ def calculate_md5(file_path):
     hash_md5 = hashlib.md5()
     try:
         with open(file_path, "rb") as f:
-            # Baca file dalam potongan 4KB untuk efisiensi
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
@@ -30,37 +56,39 @@ def calculate_md5(file_path):
 # 1. KONFIGURASI DAN INISIALISASI
 # =========================================================
 
-# Ambil kredensial dari Environment Variables
 REFRESH_TOKEN = os.environ.get('DRIVE_REFRESH_TOKEN')
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
+DRIVE_UPLOAD_FOLDER_NAME = "my-drive-upload" 
 
-# Tentukan file yang akan diunggah dengan membaca dari file sementara
+# Tentukan file yang akan diunggah
 try:
     with open("downloaded_filename.txt", "r") as f:
         DOWNLOADED_FILE = f.read().strip()
 except FileNotFoundError:
-    print("❌ ERROR: File 'downloaded_filename.txt' tidak ditemukan. Upload dibatalkan.")
+    error_msg = "❌ ERROR: File 'downloaded_filename.txt' tidak ditemukan. Upload dibatalkan."
+    print(error_msg)
+    send_telegram_message(f"❌ **Upload GAGAL!**\n\n{error_msg}")
     sys.exit(1)
 
 # Pengecekan Kredensial & File
 if not os.path.exists(DOWNLOADED_FILE):
-    print(f"❌ ERROR: File '{DOWNLOADED_FILE}' tidak ditemukan di sistem file. Upload dibatalkan.")
+    error_msg = f"❌ ERROR: File '{DOWNLOADED_FILE}' tidak ditemukan di sistem file. Upload dibatalkan."
+    print(error_msg)
+    send_telegram_message(f"❌ **Upload GAGAL!**\n\n{error_msg}")
     sys.exit(1)
 
-if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET]):
-    print("❌ ERROR: Kredensial Google Drive tidak lengkap di environment.")
+if not all([REFRESH_TOKEN, CLIENT_ID, CLIENT_SECRET, BOT_TOKEN, OWNER_ID]):
+    error_msg = "❌ ERROR: Kredensial Google Drive atau Telegram tidak lengkap di environment."
+    print(error_msg)
+    if BOT_TOKEN and OWNER_ID:
+        send_telegram_message(f"❌ **Upload GAGAL!**\n\n{error_msg}")
     sys.exit(1)
-
-# Folder Drive Tujuan
-DRIVE_UPLOAD_FOLDER_NAME = "my-drive-upload" 
-
 
 # =========================================================
 # 2. OTENTIKASI & REFRESH TOKEN
 # =========================================================
 
-# 2.1 Buat objek Credentials dari Refresh Token
 credentials = OAuth2Credentials(
     access_token=None,
     client_id=CLIENT_ID,
@@ -71,20 +99,19 @@ credentials = OAuth2Credentials(
     user_agent='GH-Actions-DriveUploader'
 )
 
-# 2.2 Memperbarui Access Token
 print("⚡ Memperbarui Access Token menggunakan Refresh Token...")
 
-http_pool = Http() 
+http_pool = Http() 
 
 try:
-    # Lakukan refresh, salurkan objek HTTP yang valid
-    credentials.refresh(http=http_pool) 
+    credentials.refresh(http=http_pool) 
 except Exception as e:
-    print(f"❌ Gagal memperbarui token. Pastikan Scope sudah 'drive' penuh dan Token valid: {e}")
+    error_msg = f"❌ Gagal memperbarui token. Pastikan Scope sudah 'drive' penuh dan Token valid: {e}"
+    print(error_msg)
+    send_telegram_message(f"❌ **Upload GAGAL!**\n\n{error_msg[:150]}...")
     sys.exit(1)
 
-# 2.3 Inisialisasi Layanan Drive
-http_auth = credentials.authorize(http_pool) 
+http_auth = credentials.authorize(http_pool) 
 drive_service = build('drive', 'v3', http=http_auth)
 
 print("✅ Autentikasi Drive berhasil. Siap upload!")
@@ -125,29 +152,25 @@ try:
     # 3.2 Tentukan MIME Type
     MIME_TYPE, _ = mimetypes.guess_type(DOWNLOADED_FILE)
     if not MIME_TYPE:
-        MIME_TYPE = 'application/octet-stream' 
+        MIME_TYPE = 'application/octet-stream' 
     
-    print(f"💡 Ditemukan MIME Type: {MIME_TYPE}")
-
-    # 3.3 Hitung MD5 Lokal (LANGKAH KRITIS)
+    # 3.3 Hitung MD5 Lokal
     LOCAL_MD5 = calculate_md5(DOWNLOADED_FILE)
     if not LOCAL_MD5:
         print("❌ Upload dibatalkan karena gagal menghitung MD5 lokal.")
+        send_telegram_message(f"❌ **Upload GAGAL!**\n\nGagal menghitung MD5 lokal untuk `{DOWNLOADED_FILE}`.")
         sys.exit(1)
     
-    print(f"💡 MD5 Checksum File Lokal: {LOCAL_MD5}")
-
-
     # 3.4 Metadata File
     file_metadata = {
         'name': DOWNLOADED_FILE,
-        'parents': [target_folder_id] 
+        'parents': [target_folder_id] 
     }
 
-    # 3.5 Buat MediaFileUpload object (resumable=True)
+    # 3.5 Buat MediaFileUpload object
     media = MediaFileUpload(
-        DOWNLOADED_FILE, 
-        mimetype=MIME_TYPE, 
+        DOWNLOADED_FILE, 
+        mimetype=MIME_TYPE, 
         resumable=True
     )
 
@@ -155,8 +178,7 @@ try:
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        # Meminta id, link, DAN md5Checksum untuk verifikasi
-        fields='id,webViewLink,webContentLink,md5Checksum' 
+        fields='id,webViewLink,webContentLink,md5Checksum' 
     )
 
     # 3.7 Mulai Upload dan Tangani Chunks
@@ -166,37 +188,50 @@ try:
     while response is None:
         try:
             status, response = request.next_chunk()
-            if status:
-                progress = int(status.progress() * 100)
-                # Batasi cetakan progress
-                if progress % 10 == 0 and progress > 0:
-                    print(f'   Uploaded {progress}%')
+            if status and int(status.progress() * 100) % 10 == 0 and int(status.progress() * 100) > 0:
+                 print(f'   Uploaded {int(status.progress() * 100)}%')
         except ResumableUploadError as e:
-            # Coba ulangi jika ada error koneksi / resumable
             print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
-            time.sleep(10) 
+            time.sleep(10) 
         except Exception as e:
-            # Tangani error umum di tengah proses upload
             print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
             
     # --- LANGKAH VERIFIKASI AKHIR ---
     DRIVE_MD5 = response.get('md5Checksum')
-
-    print(f'✅ Upload complete! File ID: {response.get("id")}')
-    print(f'🔗 Link Web Drive: {response.get("webViewLink")}')
+    WEB_VIEW_LINK = response.get("webViewLink")
 
     if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
-        print(f"👍 VERIFIKASI BERHASIL: MD5 Drive ({DRIVE_MD5}) cocok dengan MD5 Lokal. File APK UTUH.")
+        print("👍 VERIFIKASI BERHASIL. File UTUH.")
+        
+        success_message = (
+            f"🎉 **UPLOAD SUKSES!** 🎉\n\n"
+            f"File: `{DOWNLOADED_FILE}`\n"
+            f"Folder: `{DRIVE_UPLOAD_FOLDER_NAME}`\n"
+            f"MD5 Lokal: `{LOCAL_MD5}`\n"
+            f"Link Drive: [Lihat File]({WEB_VIEW_LINK})"
+        )
+        send_telegram_message(success_message)
+        
     else:
-        print("🚨 VERIFIKASI GAGAL: MD5 Checksum tidak cocok!")
-        print(f"   Lokal: {LOCAL_MD5}, Drive: {DRIVE_MD5}")
-        print("   File di Drive KORUP. Upload GAGAL.")
-        sys.exit(1) # Keluar dengan error agar proses CI/CD gagal
+        error_message = (
+            f"🚨 **UPLOAD GAGAL (VERIFIKASI GAGAL)!**\n\n"
+            f"File: `{DOWNLOADED_FILE}`\n"
+            f"MD5 Lokal: `{LOCAL_MD5}`\n"
+            f"MD5 Drive: `{DRIVE_MD5}`\n\n"
+            f"Detail: File di Drive KORUP. Upload DIBATALKAN."
+        )
+        print(error_message)
+        send_telegram_message(error_message)
+        sys.exit(1)
         
 except HttpError as e:
-    print(f"❌ Gagal saat upload file (HTTP Error): {e}")
+    error_message = f"❌ Gagal saat upload file (HTTP Error): {e}"
+    print(error_message)
+    send_telegram_message(f"❌ **Upload GAGAL (HTTP Error)!**\n\n{error_message[:150]}...")
     sys.exit(1)
 except Exception as e:
-    print(f"❌ Gagal saat upload file: {e}")
+    error_message = f"❌ Gagal saat upload file: {e}"
+    print(error_message)
+    send_telegram_message(f"❌ **Upload GAGAL (Umum)!**\n\n{error_message[:150]}...")
     sys.exit(1)
