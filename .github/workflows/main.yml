@@ -159,6 +159,8 @@ jobs:
         run: python upload.py
         shell: bash
         env:
+          BOT_TOKEN: ${{ vars.BOT_TOKEN }}
+          OWNER_ID: ${{ vars.OWNER_ID }}
           GH_TOKEN: ${{ vars.GH_PAT }} 
           # Token sekarang diakses dari $GITHUB_ENV
           DRIVE_REFRESH_TOKEN: ${{ env.DRIVE_REFRESH_TOKEN }}
