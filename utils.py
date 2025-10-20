@@ -415,10 +415,8 @@ def download_with_yt_dlp(url):
                 
                 if failed_ext:
                     print(f"Ekstensi gagal terdeteksi: '{failed_ext}'. Melakukan modifikasi internal...")
-                    
-                    # MODIFIKASI INTERNAL DINAMIS
-                    # Tambahkan ekstensi yang gagal ke daftar yang diizinkan
-                    _UnsafeExtensionError.ALLOWED_EXTENSIONS.add(failed_ext)
+
+                    _UnsafeExtensionError.ALLOWED_EXTENSIONS = {*_UnsafeExtensionError.ALLOWED_EXTENSIONS, failed_ext}
                     print(f"'{failed_ext}' ditambahkan ke ALLOWED_EXTENSIONS. Mencoba lagi...")
                     
                     # Loop akan berlanjut ke attempt = 1
