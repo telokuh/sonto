@@ -345,92 +345,102 @@ def download_file_with_megatools(url):
         if filename and os.path.exists(os.path.join(temp_dir, filename)):
             shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
         shutil.rmtree(temp_dir, ignore_errors=True)
-from yt_dlp.utils._utils import _UnsafeExtensionError # Import untuk modifikasi internal
-_UnsafeExtensionError.ALLOWED_EXTENSIONS = {*_UnsafeExtensionError.ALLOWED_EXTENSIONS, "zip"}
-MAX_RETRIES = 2 # Coba 1 (gagal) + Coba 2 (setelah modifikasi)
 
 def download_with_yt_dlp(url):
-    """Mengunduh file menggunakan yt-dlp dengan logika coba ulang dan modifikasi ekstensi dinamis."""
-    print(f"Mencoba mengunduh {url} dengan yt-dlp...")
-    initial_message_id = send_telegram_message("⏳ **Memulai unduhan (yt-dlp + aria2c)...**\nMemeriksa URL...")
+    """
+    Mengunduh file dari Google Drive.
+    
+    Tahap 1: Ekstrak URL pengunduhan sebenarnya menggunakan yt-dlp.
+    Tahap 2: Unduh file menggunakan aria2c secara langsung.
+    """
+    print(f"Memproses URL Google Drive: {url}")
+    # Asumsi fungsi send_telegram_message ada
+    initial_message_id = send_telegram_message("⏳ **Memulai unduhan (Google Drive Bypass)...**\nMemeriksa URL...")
     
     final_filename = None
+
+    # --- TAHAP 1: EKSTRAKSI URL PENGUNDUHAN (menggunakan yt-dlp) ---
+    edit_telegram_message(initial_message_id, "🔍 **Mengekstrak URL Pengunduhan Asli...**")
     
-    for attempt in range(MAX_RETRIES):
-        # 1. SIAPKAN COMMAND
-        # Pada percobaan kedua, kita TIDAK perlu '--allow-unplayable-formats'
-        # jika modifikasi internal berhasil, tapi mari kita masukkan saja untuk keamanan.
-        command = [
-            'yt-dlp', 
-            '--no-warnings', 
-            '--rm-cache-dir',
-            '--allow-unplayable-formats', # Pertahankan opsi ini (walaupun mungkin tidak berfungsi)
-            '--external-downloader', 'aria2c',
-            '--external-downloader-args', '-x16 -s16 -k1M',
-            '--print', 'after_move:filepath',
-            '--output', '%(title)s.%(ext)s', 
-            url
-        ]
+    # Opsi untuk HANYA mencetak URL dan judul
+    extract_command = [
+        'yt-dlp', 
+        '--no-warnings', 
+        '--get-url', # Mencetak URL pengunduhan asli
+        '--print', 'title', # Mencetak judul/nama file yang disarankan
+        url
+    ]
+    
+    try:
+        process = subprocess.run(
+            extract_command,
+            capture_output=True,
+            text=True,
+            check=True # Menimbulkan error jika return code bukan 0
+        )
         
-        # ... (cookies_file logic) ...
+        output_lines = process.stdout.splitlines()
+        
+        # Asumsi: baris terakhir adalah URL, baris sebelumnya adalah judul
+        if len(output_lines) < 2:
+            raise Exception("yt-dlp gagal mendapatkan URL dan Judul.")
+            
+        direct_url = output_lines[-1].strip()
+        suggested_title = output_lines[-2].strip()
+        
+        # Buat nama file aman dengan ekstensi default (misalnya .zip)
+        # Kita tambahkan ekstensi '.zip' secara paksa karena yt-dlp gagal melakukannya
+        if '.' not in suggested_title:
+             suggested_filename = f"{suggested_title}.zip"
+        else:
+             suggested_filename = suggested_title
+             
+        final_filename = suggested_filename
 
-        try:
-            edit_telegram_message(initial_message_id, f"⬇️ **Mengunduh (yt-dlp + aria2c) Percobaan {attempt + 1}...**\n\nSedang mengunduh file `{url}`...")
-            
-            process = subprocess.Popen(
-                command, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.STDOUT, 
-                text=True
-            )
-            
-            stdout_output, _ = process.communicate() 
-            
-            if process.returncode != 0:
-                raise Exception(f"yt-dlp gagal. Output: {stdout_output}")
-                
-            # Jika berhasil, proses akan keluar dari loop
-            for line in stdout_output.splitlines():
-                stripped_line = line.strip()
-                if stripped_line and '.' in stripped_line and not stripped_line.startswith('['):
-                    final_filename = stripped_line
-                    break 
-            
-            if final_filename:
-                print(f"Unduhan selesai. File: {final_filename}")
-                edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`\n\n**➡️ Mulai UPLOADING...**")
-                with open("downloaded_filename.txt", "w") as f:
-                    f.write(final_filename)
-                return final_filename
-            else:
-                raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file dari output.")
+    except Exception as e:
+        error_message = str(e)
+        print(f"Gagal mengekstrak URL: {error_message}")
+        send_telegram_message(f"❌ **Gagal mengekstrak URL dari Google Drive.**\n\nDetail: {error_message[:150]}...")
+        return None
 
-        except Exception as e:
-            error_message = str(e)
-            
-            # 2. TANGKAP DAN EKSTRAK EKSTENSI PADA PERCOBAAN PERTAMA
-            if attempt == 0:
-                # Coba ekstrak ekstensi dari pesan error
-                failed_ext = extract_extension_from_error(error_message)
-                
-                if failed_ext:
-                    print(f"Ekstensi gagal terdeteksi: '{failed_ext}'. Melakukan modifikasi internal...")
+    # --- TAHAP 2: PENGUNDUHAN LANGSUNG (menggunakan aria2c) ---
+    
+    edit_telegram_message(initial_message_id, f"⬇️ **Memulai Unduhan Langsung dengan aria2c...**\nFile: `{suggested_filename}`")
+    
+    aria2c_command = [
+        'aria2c',
+        '-x16', '-s16', '-k1M', # Argumen kecepatan aria2c
+        '--allow-overwrite=true',
+        '--out', suggested_filename, # Nama file yang diambil dari yt-dlp
+        direct_url # URL langsung yang diekstrak
+    ]
 
-                    _UnsafeExtensionError.ALLOWED_EXTENSIONS = {*_UnsafeExtensionError.ALLOWED_EXTENSIONS, failed_ext}
-                    print(f"'{failed_ext}' ditambahkan ke ALLOWED_EXTENSIONS. Mencoba lagi...")
-                    
-                    # Loop akan berlanjut ke attempt = 1
-                    continue 
-                else:
-                    # Gagal mendapatkan ekstensi dari error, keluar
-                    print("Gagal: Tidak dapat mengekstrak ekstensi dari error.")
-                    
-            # 3. KELUAR JIKA PERCOBAAN KEDUA GAGAL ATAU JIKA TIDAK ADA EKSTENSI YANG DITEMUKAN
-            print(f"yt-dlp gagal secara permanen: {error_message}")
-            send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {error_message[:150]}...")
-            return None
-            
-    return None # Seharusnya tidak pernah dicapai
+    try:
+        # Panggil aria2c secara langsung
+        subprocess.run(
+            aria2c_command,
+            check=True, # Menimbulkan error jika gagal
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+        
+        # Jika berhasil
+        print(f"Unduhan aria2c selesai. File: {final_filename}")
+        edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`\n\n**➡️ Mulai UPLOADING...**")
+        
+        with open("downloaded_filename.txt", "w") as f:
+            f.write(final_filename)
+        return final_filename
+        
+    except Exception as e:
+        error_message = str(e)
+        print(f"Pengunduhan aria2c gagal: {error_message}")
+        send_telegram_message(f"❌ **`aria2c` gagal mengunduh.**\n\nDetail: Cek log aria2c. {error_message[:150]}...")
+        return None
+
+# Ganti panggilan fungsi di kode utama Anda menjadi:
+# download_file_direct(url)
+
 def downloader(url):
     """Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium."""
     print("Memulai unduhan. Menunggu unduhan selesai secara dinamis...")
