@@ -404,42 +404,7 @@ def download_with_yt_dlp(url):
         return None
 
     # --- TAHAP 2: PENGUNDUHAN LANGSUNG (menggunakan aria2c) ---
-    
-    edit_telegram_message(initial_message_id, f"⬇️ **Memulai Unduhan Langsung dengan aria2c...**\nFile: `{suggested_filename}`")
-    
-    aria2c_command = [
-        'aria2c',
-        '-x16', '-s16', '-k1M', # Argumen kecepatan aria2c
-        '--allow-overwrite=true',
-        '--out', suggested_filename, # Nama file yang diambil dari yt-dlp
-        direct_url # URL langsung yang diekstrak
-    ]
-
-    try:
-        # Panggil aria2c secara langsung
-        subprocess.run(
-            aria2c_command,
-            check=True, # Menimbulkan error jika gagal
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        )
-        
-        # Jika berhasil
-        print(f"Unduhan aria2c selesai. File: {final_filename}")
-        edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`\n\n**➡️ Mulai UPLOADING...**")
-        
-        with open("downloaded_filename.txt", "w") as f:
-            f.write(final_filename)
-        return final_filename
-        
-    except Exception as e:
-        error_message = str(e)
-        print(f"Pengunduhan aria2c gagal: {error_message}")
-        send_telegram_message(f"❌ **`aria2c` gagal mengunduh.**\n\nDetail: Cek log aria2c. {error_message[:150]}...")
-        return None
-
-# Ganti panggilan fungsi di kode utama Anda menjadi:
-# download_file_direct(url)
+    download_file_with_aria2c([direct_url], final_filename)
 
 def downloader(url):
     """Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium."""
