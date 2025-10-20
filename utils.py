@@ -346,7 +346,7 @@ def download_file_with_megatools(url):
             shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
         shutil.rmtree(temp_dir, ignore_errors=True)
 from yt_dlp.utils._utils import _UnsafeExtensionError # Import untuk modifikasi internal
-
+_UnsafeExtensionError.ALLOWED_EXTENSIONS = {*_UnsafeExtensionError.ALLOWED_EXTENSIONS, "zip"}
 MAX_RETRIES = 2 # Coba 1 (gagal) + Coba 2 (setelah modifikasi)
 
 def download_with_yt_dlp(url):
