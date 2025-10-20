@@ -364,11 +364,14 @@ def download_with_yt_dlp(url):
     
     # Opsi untuk HANYA mencetak URL dan judul
     extract_command = [
-        'yt-dlp', 
-        '--no-warnings', 
-        '--get-url', # Mencetak URL pengunduhan asli
-        '--print', 'title', # Mencetak judul/nama file yang disarankan
-        url
+         'yt-dlp', 
+         '--no-warnings', 
+         '--no-check-certificate', # Opsi BARU: Mengabaikan pemeriksaan sertifikat (terkadang melewati batasan server)
+         '--referer', url, # Opsi BARU: Meniru permintaan yang berasal dari halaman itu sendiri
+         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', # Opsi BARU: Meniru browser umum
+         '--get-url', 
+         '--print', 'title', 
+         url
     ]
     
     try:
