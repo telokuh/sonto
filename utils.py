@@ -25,6 +25,15 @@ OWNER_ID = os.environ.get("OWNER_ID")
 # FUNGSI BANTUAN TELEGRAM
 # =========================================================
 
+
+def extract_extension_from_error(error_output):
+    """Mengekstrak ekstensi yang tidak aman dari output error yt-dlp."""
+    # Pola untuk mencari: "The extracted extension ('ext') is unusual..."
+    match = re.search(r"The extracted extension \('(.+?)'\) is unusual", error_output)
+    if match:
+        return match.group(1) # Mengembalikan 'zip', 'exe', dll.
+    return None
+    
 def send_telegram_message(message_text):
     """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
@@ -336,65 +345,94 @@ def download_file_with_megatools(url):
         if filename and os.path.exists(os.path.join(temp_dir, filename)):
             shutil.move(os.path.join(temp_dir, filename), os.path.join(original_cwd, filename))
         shutil.rmtree(temp_dir, ignore_errors=True)
+from yt_dlp.utils._utils import _UnsafeExtensionError # Import untuk modifikasi internal
+
+MAX_RETRIES = 2 # Coba 1 (gagal) + Coba 2 (setelah modifikasi)
 
 def download_with_yt_dlp(url):
-    """Mengunduh file menggunakan yt-dlp dengan aria2c backend."""
-    print(f"Mencoba mengunduh {url} dengan yt-dlp menggunakan aria2c backend...")
+    """Mengunduh file menggunakan yt-dlp dengan logika coba ulang dan modifikasi ekstensi dinamis."""
+    print(f"Mencoba mengunduh {url} dengan yt-dlp...")
     initial_message_id = send_telegram_message("⏳ **Memulai unduhan (yt-dlp + aria2c)...**\nMemeriksa URL...")
     
     final_filename = None
-
-    command = [
-        'yt-dlp', 
-        '--no-warnings', 
-        '--rm-cache-dir',
-        '--allow-unplayable-formats',
-        '--external-downloader', 'aria2c',
-        '--external-downloader-args', '-x16 -s16 -k1M',
-        '--print', 'after_move:filepath',
-        '--output', '%(title)s.%(ext)s', 
-        url
-    ]
     
-    # ... (cookies_file logic) ...
+    for attempt in range(MAX_RETRIES):
+        # 1. SIAPKAN COMMAND
+        # Pada percobaan kedua, kita TIDAK perlu '--allow-unplayable-formats'
+        # jika modifikasi internal berhasil, tapi mari kita masukkan saja untuk keamanan.
+        command = [
+            'yt-dlp', 
+            '--no-warnings', 
+            '--rm-cache-dir',
+            '--allow-unplayable-formats', # Pertahankan opsi ini (walaupun mungkin tidak berfungsi)
+            '--external-downloader', 'aria2c',
+            '--external-downloader-args', '-x16 -s16 -k1M',
+            '--print', 'after_move:filepath',
+            '--output', '%(title)s.%(ext)s', 
+            url
+        ]
+        
+        # ... (cookies_file logic) ...
 
-    try:
-        process = subprocess.Popen(
-            command, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.STDOUT, 
-            text=True
-        )
-        
-        edit_telegram_message(initial_message_id, f"⬇️ **Mengunduh (yt-dlp + aria2c)...**\n\nSedang mengunduh file `{url}`...")
-        
-        stdout_output, _ = process.communicate() 
-        
-        if process.returncode != 0:
-            raise Exception(f"yt-dlp (dengan aria2c) gagal mengunduh. Output: {stdout_output[:500]}")
+        try:
+            edit_telegram_message(initial_message_id, f"⬇️ **Mengunduh (yt-dlp + aria2c) Percobaan {attempt + 1}...**\n\nSedang mengunduh file `{url}`...")
             
-        for line in stdout_output.splitlines():
-            stripped_line = line.strip()
-            if stripped_line and '.' in stripped_line and not stripped_line.startswith('['):
-                final_filename = stripped_line
-                break 
-        
-        if final_filename:
-            print(f"Unduhan yt-dlp/aria2c selesai. File: {final_filename}")
-            edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`\n\n**➡️ Mulai UPLOADING...**")
-            # --- SIMPAN NAMA FILE UNTUK SKRIP UPLOADER ---
-            with open("downloaded_filename.txt", "w") as f:
-                f.write(final_filename)
-            return final_filename
-        else:
-            raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file dari output.")
+            process = subprocess.Popen(
+                command, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.STDOUT, 
+                text=True
+            )
+            
+            stdout_output, _ = process.communicate() 
+            
+            if process.returncode != 0:
+                raise Exception(f"yt-dlp gagal. Output: {stdout_output}")
+                
+            # Jika berhasil, proses akan keluar dari loop
+            for line in stdout_output.splitlines():
+                stripped_line = line.strip()
+                if stripped_line and '.' in stripped_line and not stripped_line.startswith('['):
+                    final_filename = stripped_line
+                    break 
+            
+            if final_filename:
+                print(f"Unduhan selesai. File: {final_filename}")
+                edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{final_filename}`\n\n**➡️ Mulai UPLOADING...**")
+                with open("downloaded_filename.txt", "w") as f:
+                    f.write(final_filename)
+                return final_filename
+            else:
+                raise Exception("yt-dlp berhasil tetapi gagal mendapatkan nama file dari output.")
 
-    except Exception as e:
-        error_message = str(e)
-        print(f"yt-dlp gagal: {error_message}")
-        send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {error_message[:150]}...")
-        return None
-
+        except Exception as e:
+            error_message = str(e)
+            
+            # 2. TANGKAP DAN EKSTRAK EKSTENSI PADA PERCOBAAN PERTAMA
+            if attempt == 0:
+                # Coba ekstrak ekstensi dari pesan error
+                failed_ext = extract_extension_from_error(error_message)
+                
+                if failed_ext:
+                    print(f"Ekstensi gagal terdeteksi: '{failed_ext}'. Melakukan modifikasi internal...")
+                    
+                    # MODIFIKASI INTERNAL DINAMIS
+                    # Tambahkan ekstensi yang gagal ke daftar yang diizinkan
+                    _UnsafeExtensionError.ALLOWED_EXTENSIONS.add(failed_ext)
+                    print(f"'{failed_ext}' ditambahkan ke ALLOWED_EXTENSIONS. Mencoba lagi...")
+                    
+                    # Loop akan berlanjut ke attempt = 1
+                    continue 
+                else:
+                    # Gagal mendapatkan ekstensi dari error, keluar
+                    print("Gagal: Tidak dapat mengekstrak ekstensi dari error.")
+                    
+            # 3. KELUAR JIKA PERCOBAAN KEDUA GAGAL ATAU JIKA TIDAK ADA EKSTENSI YANG DITEMUKAN
+            print(f"yt-dlp gagal secara permanen: {error_message}")
+            send_telegram_message(f"❌ **`yt-dlp` gagal mengunduh.**\n\nDetail: {error_message[:150]}...")
+            return None
+            
+    return None # Seharusnya tidak pernah dicapai
 def downloader(url):
     """Mengunduh file GoFile, Mediafire, dan SourceForge menggunakan Selenium."""
     print("Memulai unduhan. Menunggu unduhan selesai secara dinamis...")
