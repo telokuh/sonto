@@ -200,10 +200,10 @@ def download_file_with_aria2c(urls, output_filename):
                 current_size = os.path.getsize(output_filename)
                 
                 # Kondisi selesai: file sudah ada DAN ukurannya sama atau file .aria2 hilang
-                if (total_size is not None and current_size >= total_size) or not os.path.exists(aria2_temp_file):
+                if (total_size is not None and current_size >= total_size):
                     print(f"File {output_filename} selesai. Menghentikan aria2c...")
                     process.terminate()
-                    time.sleep(3)
+                    time.sleep(2)
                     if process.poll() is None:
                         process.kill()
                     return output_filename
