@@ -267,6 +267,7 @@ try:
     FILE_ID = response.get('id')
     WEB_VIEW_LINK = response.get("webViewLink")
     if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
+        send_upload_progress(message_id, DOWNLOADED_FILE, total_size, total_size)
         print("👍 VERIFIKASI BERHASIL. File UTUH.")
         # Publikasi file
         PUBLIC_VIEW_LINK, PUBLIC_CONTENT_LINK = make_file_public(drive_service, FILE_ID)
