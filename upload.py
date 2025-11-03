@@ -21,11 +21,11 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("OWNER_ID")
 
 def send_telegram_message(message_text):
-    """Fungsi untuk mengirim pesan ke Telegram."""
+    """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
         print("Peringatan: BOT_TOKEN atau OWNER_ID tidak diatur. Notifikasi Telegram dinonaktifkan.")
         return None
-    
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": OWNER_ID,
@@ -33,10 +33,43 @@ def send_telegram_message(message_text):
         "parse_mode": "Markdown"
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
+        return response.json().get('result', {}).get('message_id')
     except Exception as e:
         print(f"Gagal mengirim pesan Telegram: {e}")
-        
+        return None
+
+def edit_telegram_message(message_id, message_text):
+    """Fungsi untuk mengedit pesan yang sudah ada di Telegram."""
+    if not BOT_TOKEN or not OWNER_ID or not message_id:
+        print("Peringatan: Tidak bisa mengedit pesan. Notifikasi Telegram dinonaktifkan.")
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
+    payload = {
+        "chat_id": OWNER_ID,
+        "message_id": message_id,
+        "text": message_text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Gagal mengedit pesan Telegram: {e}")
+
+def human_readable_size(size_bytes):
+    if size_bytes is None or size_bytes == 0:
+        return "0B"
+    size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+    i = int(math.floor(math.log(size_bytes, 1024))) if size_bytes > 0 else 0
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2) if p > 0 else 0
+    return f"{s} {size_name[i]}"
+
+def send_upload_progress(message_id, filename, uploaded_size, total_size):
+    percent = int((uploaded_size/total_size)*100) if total_size else 0
+    text = f"⏫ Uploading `{filename}` — {percent}% ({human_readable_size(uploaded_size)}/{human_readable_size(total_size)})"
+    edit_telegram_message(message_id, text)
+
 # =========================================================
 # Fungsi Bantuan: MD5 Checksum
 # =========================================================
@@ -126,13 +159,10 @@ def make_file_public(service, file_id):
     Mengembalikan link Drive (webViewLink) setelah dijadikan publik.
     """
     print("🌍 Menetapkan izin file menjadi publik...")
-    
-    # Permission baru: Type 'anyone', Role 'reader'
     permission_body = {
         'type': 'anyone',
         'role': 'reader'
     }
-    
     try:
         # Menambahkan izin baru
         service.permissions().create(
@@ -140,16 +170,13 @@ def make_file_public(service, file_id):
             body=permission_body,
             fields='id'
         ).execute()
-        
         # Ambil ulang link tampilan web (webViewLink) dan link konten web (webContentLink/direct download)
         file_info = service.files().get(
             fileId=file_id, 
             fields='webViewLink,webContentLink'
         ).execute()
-
         print("✅ File berhasil dijadikan publik!")
         return file_info.get("webViewLink"), file_info.get("webContentLink")
-
     except HttpError as e:
         print(f"❌ Gagal mengatur izin file menjadi publik: {e}")
         return None, None
@@ -163,14 +190,12 @@ def get_or_create_folder(service, folder_name, parent_id=None):
     query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
-        
+
     try:
         response = service.files().list(q=query, fields='files(id)').execute()
         files = response.get('files', [])
-        
         if files:
             return files[0].get('id')
-        
         file_metadata = {
             'name': folder_name,
             'mimeType': 'application/vnd.google-apps.folder',
@@ -181,7 +206,6 @@ def get_or_create_folder(service, folder_name, parent_id=None):
     except HttpError as e:
         print(f"❌ Gagal mengakses/membuat folder: {e}")
         sys.exit(1)
-
 
 try:
     # 3.1 Cari atau buat folder tujuan
@@ -204,53 +228,50 @@ try:
         'name': DOWNLOADED_FILE,
         'parents': [target_folder_id]
     }
-
-    # 3.5 Buat MediaFileUpload object
+    # 3.5 MediaFileUpload object
     media = MediaFileUpload(
         DOWNLOADED_FILE,
         mimetype=MIME_TYPE,
         resumable=True
     )
-
     # 3.6 Buat Permintaan Upload
-    # Sekarang kita meminta 'id' juga
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
         fields='id,webViewLink,webContentLink,md5Checksum' 
     )
-
-    # 3.7 Mulai Upload dan Tangani Chunks
+    # Notifikasi mulai upload
+    message_id = send_telegram_message(f"🚀 Mulai upload file `{DOWNLOADED_FILE}` ke Google Drive...")
+    last_percent_notified = -1
     response = None
     print(f'🚀 Memulai upload Resumable untuk: {DOWNLOADED_FILE}...')
-    
+    total_size = os.path.getsize(DOWNLOADED_FILE)
+    # Progres upload otomatis ke Telegram setiap 10%
     while response is None:
         try:
             status, response = request.next_chunk()
-            if status and int(status.progress() * 100) % 10 == 0 and int(status.progress() * 100) > 0:
-                print(f'     Uploaded {int(status.progress() * 100)}%')
+            percent_uploaded = int(status.progress() * 100) if status else 0
+            uploaded_size = int(status.progress() * total_size) if status else 0
+            if status and percent_uploaded % 10 == 0 and percent_uploaded > last_percent_notified:
+                send_upload_progress(message_id, DOWNLOADED_FILE, uploaded_size, total_size)
+                last_percent_notified = percent_uploaded
+                print(f'     Uploaded {percent_uploaded}%')
         except ResumableUploadError as e:
             print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
         except Exception as e:
             print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
-            
-    # --- LANGKAH VERIFIKASI AKHIR & SETEL Izin Publik ---
+    # --- Verifikasi dan setel izin publik ---
     DRIVE_MD5 = response.get('md5Checksum')
-    FILE_ID = response.get('id') # ⭐ ID file yang diunggah
+    FILE_ID = response.get('id')
     WEB_VIEW_LINK = response.get("webViewLink")
-
     if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
         print("👍 VERIFIKASI BERHASIL. File UTUH.")
-        
-        # ⭐ Panggil fungsi untuk membuat file publik
+        # Publikasi file
         PUBLIC_VIEW_LINK, PUBLIC_CONTENT_LINK = make_file_public(drive_service, FILE_ID)
-        
-        # Tentukan link mana yang akan digunakan di pesan notifikasi
         final_link_view = PUBLIC_VIEW_LINK if PUBLIC_VIEW_LINK else WEB_VIEW_LINK
         final_link_content = PUBLIC_CONTENT_LINK if PUBLIC_CONTENT_LINK else "N/A (Link Download)"
-        
         success_message = (
             f"🎉 **UPLOAD SUKSES!** 🎉\n\n"
             f"File: `{DOWNLOADED_FILE}`\n"
@@ -261,7 +282,6 @@ try:
             f"Link Download Langsung: `{final_link_content}`" 
         )
         send_telegram_message(success_message)
-        
     else:
         error_message = (
             f"🚨 **UPLOAD GAGAL (VERIFIKASI GAGAL)!**\n\n"
@@ -273,7 +293,7 @@ try:
         print(error_message)
         send_telegram_message(error_message)
         sys.exit(1)
-        
+
 except HttpError as e:
     error_message = f"❌ Gagal saat upload file (HTTP Error): {e}"
     print(error_message)
