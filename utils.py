@@ -444,6 +444,77 @@ def process_sourceforge_download(driver, url, initial_message_id):
     
     return downloaded_filename
 
+def process_apkadmin_download(driver, url, initial_message_id):
+    """
+    Menangani proses dua kali klik tombol download (seperti pada Apk Admin).
+    """
+    driver.get(url)
+    
+    # 1. Klik Tombol Download Pertama
+    SELECTOR_STEP_1 = "#content > div > div.download-file-block.d-flex.justify-content-between > div.block > div.download-file-button"
+    
+    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Klik tombol Step 1...")
+    
+    try:
+        button_step_1 = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_1))
+        )
+        driver.execute_script("arguments[0].click();", button_step_1)
+        time.sleep(2) # Beri jeda sebentar setelah klik
+        print("Step 1 berhasil diklik.")
+    except TimeoutException:
+        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 1 (SELECTOR_STEP_1).")
+
+    # 2. Tunggu dan Klik Tombol Download Kedua (Final)
+    SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
+    
+    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Menunggu tombol Step 2 muncul...")
+    
+    try:
+        # Tunggu sampai tombol download final muncul dan bisa diklik
+        download_button = WebDriverWait(driver, 30).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
+        )
+        driver.execute_script("arguments[0].click();", download_button)
+        time.sleep(1)
+    except TimeoutException:
+        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 2 (SELECTOR_STEP_2).")
+
+    # 3. Monitoring Download (Sama seperti process_selenium_download)
+    start_time = time.time()
+    timeout = 300
+    midway_notified = False
+    
+    while time.time() - start_time < timeout:
+        # Cek apakah ada file yang sedang didownload
+        is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(TEMP_DOWNLOAD_DIR))
+        
+        elapsed_time = time.time() - start_time
+        if elapsed_time > 30 and not midway_notified and is_downloading:
+            edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Proses unduhan berjalan (sudah 30+ detik).")
+            midway_notified = True
+        
+        if not is_downloading:
+            print("Unduhan selesai di folder sementara!")
+            break
+        time.sleep(1)
+        
+    else:
+        raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
+
+    # 4. Finalisasi File
+    list_of_files = [f for f in os.listdir(TEMP_DOWNLOAD_DIR) if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.')]
+    if list_of_files:
+        latest_file_path = max([os.path.join(TEMP_DOWNLOAD_DIR, f) for f in list_of_files], key=os.path.getctime)
+        downloaded_filename = os.path.basename(latest_file_path)
+        shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
+        
+        edit_telegram_message(initial_message_id, f"✅ **[Apk Admin Mode] Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+        
+        with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
+        return downloaded_filename
+    else:
+        raise FileNotFoundError("Gagal menemukan file yang diunduh.")
 # =========================================================
 # FUNGSI UTAMA (ORCHESTRATOR)
 # =========================================================
@@ -458,9 +529,11 @@ def downloader(url):
     
     try:
         # 1. LOGIKA YT-DLP (Google Drive)
-        if "drive.google.com" in url:
-            downloaded_filename = download_with_yt_dlp(url)
-        
+        if "apkadmin" in url.lower(): # Menggunakan penanda khusus 'apkadmin'
+            print("Mode: Apk Admin (Selenium 2-Step)")
+            driver = initialize_selenium_driver(TEMP_DOWNLOAD_DIR)
+            if not driver: raise Exception("Gagal inisialisasi driver Selenium.")
+            downloaded_filename = process_apkadmin_download(driver, url, initial_message_id)
         # 2. LOGIKA MEGATOOLS (MEGA)
         elif "mega.nz" in url:
             downloaded_filename = download_file_with_megatools(url)
@@ -531,7 +604,3 @@ def downloader(url):
 
 if __name__ == '__main__':
     # Contoh penggunaan (hanya untuk testing)
-    # Anda harus menyediakan URL yang valid di sini
-    print("Kode downloader sudah dimuat. Jalankan fungsi downloader(url) dengan URL yang valid.")
-    # downloader("https://mega.nz/file/...") 
-    # downloader("https://www.mediafire.com/file/...")
