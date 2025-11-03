@@ -32,19 +32,29 @@ TEMP_DOWNLOAD_DIR = tempfile.mkdtemp()
 # =========================================================
 
 def send_telegram_message(message_text):
-    """Mengirim pesan ke Telegram dan mengembalikan message_id."""
+    """Fungsi untuk mengirim pesan ke Telegram dan mengembalikan message_id."""
     if not BOT_TOKEN or not OWNER_ID:
         print("Peringatan: BOT_TOKEN atau OWNER_ID tidak diatur. Notifikasi Telegram dinonaktifkan.")
         return None
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": OWNER_ID, "text": message_text, "parse_mode": "Markdown"}
+    payload = {
+        "chat_id": OWNER_ID,
+        "text": message_text,
+        "parse_mode": "Markdown"
+    }
     try:
         response = requests.post(url, json=payload, timeout=10)
-        return response.json().get('result', {}).get('message_id')
+        
+        # --- DEBUGGING TAMBAHAN ---
+        response_json = response.json()
+        print(f"DEBUG: Telegram Send Response: {response_json}")
+        # --------------------------
+
+        return response_json.get('result', {}).get('message_id')
     except Exception as e:
         print(f"Gagal mengirim pesan Telegram: {e}")
         return None
-
 def edit_telegram_message(message_id, message_text):
     """Mengedit pesan yang sudah ada di Telegram."""
     if not BOT_TOKEN or not OWNER_ID or not message_id:
