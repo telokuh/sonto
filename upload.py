@@ -66,6 +66,7 @@ def human_readable_size(size_bytes):
     return f"{s} {size_name[i]}"
 
 def send_upload_progress(message_id, filename, uploaded_size, total_size):
+    """Fungsi untuk mengirim progress upload ke Telegram."""
     percent = int((uploaded_size/total_size)*100) if total_size else 0
     text = f"⏫ Uploading `{filename}` — {percent}% ({human_readable_size(uploaded_size)}/{human_readable_size(total_size)})"
     edit_telegram_message(message_id, text)
@@ -242,37 +243,55 @@ try:
     )
     # Notifikasi mulai upload
     message_id = send_telegram_message(f"🚀 Mulai upload file `{DOWNLOADED_FILE}` ke Google Drive...")
-    last_percent_notified = -1
+    
+    # --- LOGIKA 2X UPDATE PROGRESS (MODIFIKASI DI SINI) ---
+    last_notified_percent = 0 # 0 -> 50 -> 100
     response = None
     print(f'🚀 Memulai upload Resumable untuk: {DOWNLOADED_FILE}...')
     total_size = os.path.getsize(DOWNLOADED_FILE)
-    # Progres upload otomatis ke Telegram setiap 10%
+    
     while response is None:
         try:
             status, response = request.next_chunk()
-            percent_uploaded = int(status.progress() * 100) if status else 0
-            uploaded_size = int(status.progress() * total_size) if status else 0
-            if status and percent_uploaded % 10 == 0 and percent_uploaded > last_percent_notified:
-                send_upload_progress(message_id, DOWNLOADED_FILE, uploaded_size, total_size)
-                last_percent_notified = percent_uploaded
-                print(f'     Uploaded {percent_uploaded}%')
+            
+            if status:
+                percent_uploaded = int(status.progress() * 100)
+                uploaded_size = int(status.progress() * total_size)
+
+                # LOGIKA 2X UPDATE: Hanya update pada 50% dan 100%
+                should_update_50 = (percent_uploaded >= 50 and last_notified_percent < 50)
+                should_update_100 = (percent_uploaded == 100)
+                
+                if should_update_50 or should_update_100:
+                    send_upload_progress(message_id, DOWNLOADED_FILE, uploaded_size, total_size)
+                    last_notified_percent = percent_uploaded
+                    print(f'      Uploaded {percent_uploaded}%')
+                    
         except ResumableUploadError as e:
             print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
         except Exception as e:
             print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
+            
     # --- Verifikasi dan setel izin publik ---
+    
+    # Pastikan update 100% terakhir dikirim jika loop selesai (meskipun harusnya sudah terkirim)
+    if response and last_notified_percent < 100:
+        send_upload_progress(message_id, DOWNLOADED_FILE, total_size, total_size)
+    
     DRIVE_MD5 = response.get('md5Checksum')
     FILE_ID = response.get('id')
     WEB_VIEW_LINK = response.get("webViewLink")
+    
     if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
-        send_upload_progress(message_id, DOWNLOADED_FILE, total_size, total_size)
         print("👍 VERIFIKASI BERHASIL. File UTUH.")
+        
         # Publikasi file
         PUBLIC_VIEW_LINK, PUBLIC_CONTENT_LINK = make_file_public(drive_service, FILE_ID)
         final_link_view = PUBLIC_VIEW_LINK if PUBLIC_VIEW_LINK else WEB_VIEW_LINK
         final_link_content = PUBLIC_CONTENT_LINK if PUBLIC_CONTENT_LINK else "N/A (Link Download)"
+        
         success_message = (
             f"🎉 **UPLOAD SUKSES!** 🎉\n\n"
             f"File: `{DOWNLOADED_FILE}`\n"
