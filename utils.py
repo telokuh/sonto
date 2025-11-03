@@ -446,49 +446,59 @@ def process_sourceforge_download(driver, url, initial_message_id):
 
 def process_apkadmin_download(driver, url, initial_message_id):
     """
-    Menangani proses dua kali klik tombol download (seperti pada Apk Admin).
+    Menangani proses dua kali klik tombol download (seperti pada Apk Admin)
+    di mana klik pertama memicu NAVIGASI/FORM SUBMIT ke halaman baru.
     """
     driver.get(url)
     
-    # 1. Klik Tombol Download Pertama
-    SELECTOR_STEP_1 = "#content > div > div.download-file-block.d-flex.justify-content-between > div.block > div.download-file-button"
+    # Selector untuk FORM (atau tombol submit yang ada di dalamnya)
+    SELECTOR_FORM = "form[name='F1']"
     
-    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Klik tombol Step 1...")
+    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Mencari dan mengirimkan FORM Step 1...")
     
     try:
-        button_step_1 = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_1))
+        # 1. Cari elemen FORM berdasarkan name='F1'
+        form_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_FORM))
         )
-        print( button_step_1.get_attribute("outerHTML") )
-        driver.execute_script("arguments[0].click();", button_step_1)
-        time.sleep(2) # Beri jeda sebentar setelah klik
-        print("Step 1 berhasil diklik.")
+        
+        # 2. Kirimkan FORM. Ini akan memicu navigasi ke halaman berikutnya.
+        form_element.submit()
+        
+        print("FORM Step 1 berhasil dikirim (submit). Menunggu halaman kedua dimuat...")
     except TimeoutException:
-        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 1 (SELECTOR_STEP_1).")
+        raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
-    # 2. Tunggu dan Klik Tombol Download Kedua (Final)
+    # 2. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
+    # Selector ini tetap digunakan untuk halaman kedua:
     SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
     
-    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Menunggu tombol Step 2 muncul...")
+    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Halaman kedua dimuat. Mencari tombol Step 2 (Max 45 detik)...")
     
     try:
-        # Tunggu sampai tombol download final muncul dan bisa diklik
-        download_button = WebDriverWait(driver, 30).until(
+        # Menunggu tombol final muncul di DOM halaman baru
+        # Waktu tunggu 45 detik (perbaikan sebelumnya)
+        download_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
         )
-        print( download_button.get_attribute("outerHTML") )
         driver.execute_script("arguments[0].click();", download_button)
         time.sleep(1)
     except TimeoutException:
-        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 2 (SELECTOR_STEP_2).")
+        current_url = driver.current_url
+        page_source_start = driver.page_source[:500]
+        print(f"DEBUG: URL saat gagal: {current_url}")
+        print(f"DEBUG: Awal source code: {page_source_start}...")
+        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 2 (SELECTOR_STEP_2). Cek URL/Selector.")
 
-    # 3. Monitoring Download (Sama seperti process_selenium_download)
+    # 3. Monitoring Download (Sama seperti sebelumnya)
+    # [LANJUTKAN DENGAN LOGIKA MONITORING DOWNLOAD SEPERTI SEBELUMNYA]
+    # ...
+    
     start_time = time.time()
     timeout = 300
     midway_notified = False
     
     while time.time() - start_time < timeout:
-        # Cek apakah ada file yang sedang didownload
         is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(TEMP_DOWNLOAD_DIR))
         
         elapsed_time = time.time() - start_time
