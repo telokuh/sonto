@@ -48,7 +48,7 @@ def send_telegram_message(message_text):
         
         # --- DEBUGGING TAMBAHAN ---
         response_json = response.json()
-        print(f"DEBUG: Telegram Send Response: {response_json}")
+        #print(f"DEBUG: Telegram Send Response: {response_json}")
         # --------------------------
 
         return response_json.get('result', {}).get('message_id')
@@ -475,16 +475,35 @@ def downloader(url):
             elif "gofile" in url or "mediafire" in url:
                 downloaded_filename = process_selenium_download(driver, url, initial_message_id)
 
-        # 4. LOGIKA ARIA2C LANGSUNG (Pixeldrain)
+        # 4. LOGIKA PIXELDRAIN (Ambil info file sebelum download)
         elif "pixeldrain" in url:
+            print("Mode: Pixeldrain (Ambil Info File)")
+            
             file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
             if not file_id_match: raise ValueError("URL Pixeldrain tidak valid.")
             file_id = file_id_match.group(2)
-            download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
             
-            head_resp = requests.head(download_url, allow_redirects=True, timeout=10)
-            head_resp.raise_for_status()
-            filename = os.path.basename(urlparse(head_resp.url).path) or "pixeldrain_download"
+            # --- LANGKAH 1: Ambil Nama File dari API ---
+            info_url = f"https://pixeldrain.com/api/file/{file_id}/info"
+            
+            edit_telegram_message(initial_message_id, f"🔍 **Mendapatkan informasi file dari Pixeldrain...** ID: `{file_id}`")
+            
+            try:
+                info_resp = requests.get(info_url, timeout=10)
+                info_resp.raise_for_status()
+                file_info = info_resp.json()
+            except requests.exceptions.RequestException as e:
+                raise Exception(f"Gagal koneksi ke API Pixeldrain: {e}")
+            
+            if file_info.get('success') and file_info.get('name'):
+                filename = file_info['name']
+            else:
+                # Fallback jika API tidak memberikan nama
+                print("⚠️ API Pixeldrain tidak memberikan nama file yang valid. Menggunakan fallback.")
+                filename = f"pixeldrain_download_{file_id}"
+            
+            # --- LANGKAH 2: Download Menggunakan Nama yang Benar ---
+            download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
             
             edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`")
             downloaded_filename = download_file_with_aria2c([download_url], filename)
@@ -492,7 +511,6 @@ def downloader(url):
             if downloaded_filename:
                 edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
                 with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-        
         else:
             raise ValueError("URL tidak dikenali atau tidak didukung.")
 
