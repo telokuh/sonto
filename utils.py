@@ -602,5 +602,3 @@ def downloader(url):
         shutil.rmtree(TEMP_DOWNLOAD_DIR, ignore_errors=True)
         return downloaded_filename
 
-if __name__ == '__main__':
-    # Contoh penggunaan (hanya untuk testing)
