@@ -13,7 +13,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.errors import ResumableUploadError
 
 # =========================================================
-# FUNGSI BANTUAN TELEGRAM (Diperlukan di skrip ini)
+# FUNGSI BANTUAN TELEGRAM
 # =========================================================
 
 # Ambil token bot dan chat ID dari environment variables
@@ -118,6 +118,43 @@ drive_service = build('drive', 'v3', http=http_auth)
 print("✅ Autentikasi Drive berhasil. Siap upload!")
 
 # =========================================================
+# FUNGSI BANTUAN: Buat Publik
+# =========================================================
+def make_file_public(service, file_id):
+    """
+    Menetapkan izin agar file dapat diakses publik (Anyone with the link can view).
+    Mengembalikan link Drive (webViewLink) setelah dijadikan publik.
+    """
+    print("🌍 Menetapkan izin file menjadi publik...")
+    
+    # Permission baru: Type 'anyone', Role 'reader'
+    permission_body = {
+        'type': 'anyone',
+        'role': 'reader'
+    }
+    
+    try:
+        # Menambahkan izin baru
+        service.permissions().create(
+            fileId=file_id,
+            body=permission_body,
+            fields='id'
+        ).execute()
+        
+        # Ambil ulang link tampilan web (webViewLink) dan link konten web (webContentLink/direct download)
+        file_info = service.files().get(
+            fileId=file_id, 
+            fields='webViewLink,webContentLink'
+        ).execute()
+
+        print("✅ File berhasil dijadikan publik!")
+        return file_info.get("webViewLink"), file_info.get("webContentLink")
+
+    except HttpError as e:
+        print(f"❌ Gagal mengatur izin file menjadi publik: {e}")
+        return None, None
+
+# =========================================================
 # 3. LOGIKA UPLOAD (Resumable Upload & Verifikasi MD5)
 # =========================================================
 
@@ -176,10 +213,11 @@ try:
     )
 
     # 3.6 Buat Permintaan Upload
+    # Sekarang kita meminta 'id' juga
     request = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id,webViewLink,webContentLink,md5Checksum'
+        fields='id,webViewLink,webContentLink,md5Checksum' 
     )
 
     # 3.7 Mulai Upload dan Tangani Chunks
@@ -190,7 +228,7 @@ try:
         try:
             status, response = request.next_chunk()
             if status and int(status.progress() * 100) % 10 == 0 and int(status.progress() * 100) > 0:
-                 print(f'    Uploaded {int(status.progress() * 100)}%')
+                print(f'     Uploaded {int(status.progress() * 100)}%')
         except ResumableUploadError as e:
             print(f"⚠️ Error Resumable Upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
@@ -198,19 +236,29 @@ try:
             print(f"❌ Error tak terduga saat upload. Mencoba lagi dalam 10 detik...: {e}")
             time.sleep(10)
             
-    # --- LANGKAH VERIFIKASI AKHIR ---
+    # --- LANGKAH VERIFIKASI AKHIR & SETEL Izin Publik ---
     DRIVE_MD5 = response.get('md5Checksum')
+    FILE_ID = response.get('id') # ⭐ ID file yang diunggah
     WEB_VIEW_LINK = response.get("webViewLink")
 
     if DRIVE_MD5 and LOCAL_MD5 and DRIVE_MD5.lower() == LOCAL_MD5.lower():
         print("👍 VERIFIKASI BERHASIL. File UTUH.")
+        
+        # ⭐ Panggil fungsi untuk membuat file publik
+        PUBLIC_VIEW_LINK, PUBLIC_CONTENT_LINK = make_file_public(drive_service, FILE_ID)
+        
+        # Tentukan link mana yang akan digunakan di pesan notifikasi
+        final_link_view = PUBLIC_VIEW_LINK if PUBLIC_VIEW_LINK else WEB_VIEW_LINK
+        final_link_content = PUBLIC_CONTENT_LINK if PUBLIC_CONTENT_LINK else "N/A (Link Download)"
         
         success_message = (
             f"🎉 **UPLOAD SUKSES!** 🎉\n\n"
             f"File: `{DOWNLOADED_FILE}`\n"
             f"Folder: `{DRIVE_UPLOAD_FOLDER_NAME}`\n"
             f"MD5 Lokal: `{LOCAL_MD5}`\n"
-            f"Link Drive: [Lihat File]({WEB_VIEW_LINK})"
+            f"**Status:** **PUBLIK (Dapat Diakses Siapa Saja)!**\n"
+            f"Link Drive: [Lihat File]({final_link_view})\n"
+            f"Link Download Langsung: `{final_link_content}`" 
         )
         send_telegram_message(success_message)
         
