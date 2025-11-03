@@ -23,7 +23,7 @@ from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 # =========================================================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = os.environ.get("OWNER_ID")
+OWNER_ID = os.environ.get("PAYLOAD_SENDER")
 # Tentukan directory untuk download sementara (hanya untuk Selenium)
 TEMP_DOWNLOAD_DIR = tempfile.mkdtemp()
 
