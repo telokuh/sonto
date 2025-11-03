@@ -6,7 +6,6 @@ from utils import (
     download_with_yt_dlp,
     download_file_with_aria2c,
     download_file_with_megatools,
-    pixeldrain,
     downloader
 )
 
