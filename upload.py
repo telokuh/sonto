@@ -17,7 +17,7 @@ from googleapiclient.errors import ResumableUploadError
 # =========================================================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = os.environ.get("OWNER_ID")
+OWNER_ID = os.environ.get("PAYLOAD_SENDER")
 REFRESH_TOKEN = os.environ.get('DRIVE_REFRESH_TOKEN')
 CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
