@@ -30,9 +30,8 @@ def main_downloader(url):
         print("MEGA. Menggunakan megatools...")
         
         downloaded_filename = download_file_with_megatools(url)
-    elif "pixeldrain" in url:
-        downloaded_filename = pixeldrain(url)
-    elif "mediafire" in url or "gofile" in url or "sourceforge" in url:
+    
+    elif "pixeldrain" in url or "mediafire" in url or "gofile" in url or "sourceforge" in url:
         print(" Menggunakan Selenium...")
         downloaded_filename = downloader(url)
         
