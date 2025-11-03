@@ -459,6 +459,7 @@ def process_apkadmin_download(driver, url, initial_message_id):
         button_step_1 = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_1))
         )
+        print( button_step_1.get_attribute("outerHTML") )
         driver.execute_script("arguments[0].click();", button_step_1)
         time.sleep(2) # Beri jeda sebentar setelah klik
         print("Step 1 berhasil diklik.")
@@ -475,6 +476,7 @@ def process_apkadmin_download(driver, url, initial_message_id):
         download_button = WebDriverWait(driver, 30).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
         )
+        print( download_button.get_attribute("outerHTML") )
         driver.execute_script("arguments[0].click();", download_button)
         time.sleep(1)
     except TimeoutException:
