@@ -339,7 +339,7 @@ def process_selenium_download(driver, url, initial_message_id):
         SELECTOR_STEP_2 = download_button_selector # Hanya ada satu langkah
     elif "mediafire" in url:
         # Mediafire 2-step: Form Submit (Step 1) lalu Klik (Step 2)
-        FORM_SELECTOR_STEP_1 = "form.dl-button-form" # Selector form submit pertama
+        FORM_SELECTOR_STEP_1 = "form.dl-btn-form" # Selector form submit pertama
         SELECTOR_STEP_2 = "#downloadButton"          # Selector tombol download final di halaman baru
     else:
         raise ValueError("URL tidak didukung oleh proses Selenium ini.")
