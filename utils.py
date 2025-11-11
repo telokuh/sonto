@@ -598,13 +598,14 @@ def process_apkadmin_download(driver, url, initial_message_id):
     # 2. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
     # Selector ini tetap digunakan untuk halaman kedua:
     SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
+    sss =             "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a > img
     
     edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Halaman kedua dimuat. Mencari tombol Step 2 (Max 45 detik)...")
     
     try:
         # Menunggu tombol final muncul di DOM halaman baru
         # Waktu tunggu 45 detik (perbaikan sebelumnya)
-        download_button = WebDriverWait(driver, 10).until(
+        download_button = WebDriverWait(driver, 30).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
         )
         driver.execute_script("arguments[0].click();", download_button)
