@@ -347,8 +347,8 @@ def process_selenium_download(driver, url, initial_message_id):
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
         driver.execute_script("arguments[0].click();", download_button)
-        time.sleep(2)
-        driver.execute_script("arguments[0].click();", download_button)
+        time.sleep(5)
+        
     except TimeoutException:
         raise TimeoutException("Gagal menemukan atau mengklik tombol download.")
     
@@ -373,7 +373,7 @@ def process_selenium_download(driver, url, initial_message_id):
         
     else:
         raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
-    time.sleep(5)
+
     
     # 4. Finalisasi File
     # Pastikan mengambil file yang paling baru (yang terakhir didownload)
