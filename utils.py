@@ -372,7 +372,8 @@ def process_selenium_download(driver, url, initial_message_id):
         
     else:
         raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
-
+    time.sleep(5)
+    
     # 4. Finalisasi File
     # Pastikan mengambil file yang paling baru (yang terakhir didownload)
     list_of_files = [f for f in os.listdir(TEMP_DOWNLOAD_DIR) if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.')]
@@ -387,6 +388,8 @@ def process_selenium_download(driver, url, initial_message_id):
         with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
         return downloaded_filename
     else:
+        print(f"DEBUG: Direktori download: {TEMP_DOWNLOAD_DIR}")
+        print(f"DEBUG: Isi direktori setelah monitoring: {os.listdir(TEMP_DOWNLOAD_DIR)}")
         raise FileNotFoundError("Gagal menemukan file yang diunduh.")
 
 def process_sourceforge_download(driver, url, initial_message_id):
