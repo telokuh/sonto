@@ -340,7 +340,7 @@ def process_selenium_download(driver, url, initial_message_id):
         
     elif "mediafire" in url:
         # Mediafire 2-step
-        FORM_SELECTOR_STEP_1 = "form.dl-button-form" 
+        FORM_SELECTOR_STEP_1 = "form.dl-btn-form" 
         SELECTOR_STEP_2 = "#downloadButton"          
     else:
         raise ValueError("URL tidak didukung oleh proses Selenium ini.")
