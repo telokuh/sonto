@@ -327,54 +327,110 @@ def initialize_selenium_driver(download_dir):
 
 def process_selenium_download(driver, url, initial_message_id):
     """
-    Menangani proses klik tombol dan monitoring download untuk Gofile/Mediafire.
-    Mediafire: Menggunakan logika 2-step (Form Submit -> Klik Final).
+    Menangani proses Gofile (1-step click) dan Mediafire (2-step: Form Submit -> Ekstraksi Link -> Aria2c).
     """
     driver.get(url)
+    downloaded_filename = None
     
     # 1. Tentukan Selektor Tombol/Form
     if "gofile" in url:
-        # Gofile tetap 1-step click
+        # Gofile tetap 1-step click (Logika Monitoring Lama)
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
-        SELECTOR_STEP_2 = download_button_selector # Hanya ada satu langkah
+        SELECTOR_STEP_2 = download_button_selector 
+        
     elif "mediafire" in url:
-        # Mediafire 2-step: Form Submit (Step 1) lalu Klik (Step 2)
-        FORM_SELECTOR_STEP_1 = "form.dl-btn-form" # Selector form submit pertama
-        SELECTOR_STEP_2 = "#downloadButton"          # Selector tombol download final di halaman baru
+        # Mediafire 2-step
+        FORM_SELECTOR_STEP_1 = "form.dl-button-form" 
+        SELECTOR_STEP_2 = "#downloadButton"          
     else:
         raise ValueError("URL tidak didukung oleh proses Selenium ini.")
         
     edit_telegram_message(initial_message_id, f"⬇️ **[Mode Download]** Menganalisis situs...")
 
-    # --- LOGIKA KHUSUS MEDIAFIRE 2-STEP ---
+    # ====================================================================
+    # --- LOGIKA KHUSUS MEDIAFIRE: FORM SUBMIT + EKSTRAKSI LINK ---
+    # ====================================================================
     if "mediafire" in url:
         edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Mencari dan mengirimkan FORM Step 1...")
         try:
-            # 1. Cari elemen FORM berdasarkan class
+            # 1. Kirimkan FORM
             form_element = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, FORM_SELECTOR_STEP_1))
             )
-            
-            # 2. Kirimkan FORM (Ini memicu navigasi ke halaman berikutnya)
             form_element.submit()
             print("MediaFire FORM Step 1 berhasil dikirim. Menunggu halaman kedua...")
             
         except TimeoutException:
             raise TimeoutException(f"Gagal menemukan FORM MediaFire '{FORM_SELECTOR_STEP_1}'.")
 
-        # 3. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
-        edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Halaman kedua dimuat. Mencari tombol download final...")
+        # 2. Tunggu dan EKSTRAKSI URL dan NAMA FILE di Halaman Baru
+        edit_telegram_message(initial_message_id, "🔍 **[MediaFire Mode]** Halaman kedua dimuat. Mengekstrak URL Download Langsung...")
         
         try:
-            # Menunggu tombol final muncul di DOM halaman baru
             download_button = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
+                EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_STEP_2))
             )
-            driver.execute_script("arguments[0].click();", download_button)
-            time.sleep(2) # Jeda untuk memulai download
+            
+            final_download_url = download_button.get_attribute('href')
+            
+            if not final_download_url:
+                raise Exception("Atribut 'href' pada tombol download kosong.")
+
+            # --- PERBAIKAN: MENDAPATKAN NAMA FILE DARI HEADER ---
+            edit_telegram_message(initial_message_id, "🔍 **[MediaFire Mode]** Memeriksa header Content-Disposition...")
+            
+            file_name = None
+            try:
+                # Gunakan requests.head untuk mendapatkan header tanpa mengunduh seluruh file
+                head_response = requests.head(final_download_url, allow_redirects=True, timeout=10)
+                head_response.raise_for_status()
+                
+                # Mendapatkan nama file dari header Content-Disposition
+                cd_header = head_response.headers.get('Content-Disposition')
+                if cd_header:
+                    fname_match = re.search(r'filename\*?=["\']?(?:utf-8\'\')?([^"\';]+)["\']?', cd_header, re.I)
+                    if fname_match:
+                        file_name = fname_match.group(1).strip()
+                        # Hapus karakter non-ASCII yang mungkin tersisa
+                        file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
+                    else:
+                        # Fallback: Cari nama setelah 'filename='
+                        fname_match_simple = re.search(r'filename=["\']?([^"\';]+)["\']?', cd_header, re.I)
+                        if fname_match_simple:
+                             file_name = fname_match_simple.group(1).strip()
+                             file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
+
+                # Fallback terakhir jika header CD tidak ada atau gagal diuraikan
+                if not file_name:
+                    url_path = urlparse(final_download_url).path
+                    file_name = url_path.split('/')[-1]
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Peringatan: Gagal mendapatkan header file dari URL. Fallback ke nama dari path URL. Detail: {e}")
+                url_path = urlparse(final_download_url).path
+                file_name = url_path.split('/')[-1]
+            
+            # --- END OF HEADER EXTRACTION ---
+
+            print(f"Ekstraksi Berhasil! URL: {final_download_url}, Nama File Dikonfirmasi: {file_name}")
+            
+            # --- PANGGIL ARIA2C ---
+            edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
+            downloaded_filename = download_file_with_aria2c([final_download_url], file_name)
+            
+            # --- FINALISASI ARIA2C ---
+            if downloaded_filename:
+                edit_telegram_message(initial_message_id, f"✅ **MediaFire: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+                with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
+            else:
+                raise Exception("Aria2c gagal mengunduh file.")
+                
+            return downloaded_filename
             
         except TimeoutException:
-            raise TimeoutException(f"Gagal menemukan atau mengklik tombol download Step 2 MediaFire ('{SELECTOR_STEP_2}').")
+            raise TimeoutException(f"Gagal menemukan elemen tombol download final MediaFire ('{SELECTOR_STEP_2}').")
+        except Exception as e:
+            raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
 
     # --- LOGIKA GOFILE 1-STEP (atau jika di atas berhasil memicu download) ---
     elif "gofile" in url:
