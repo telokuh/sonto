@@ -347,7 +347,8 @@ def process_selenium_download(driver, url, initial_message_id):
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
         driver.execute_script("arguments[0].click();", download_button)
-        time.sleep(1)
+        time.sleep(2)
+        driver.execute_script("arguments[0].click();", download_button)
     except TimeoutException:
         raise TimeoutException("Gagal menemukan atau mengklik tombol download.")
     
