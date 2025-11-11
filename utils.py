@@ -106,7 +106,7 @@ def get_total_file_size_safe(url):
 # FUNGSI DOWNLOAD UTAMA (ARIA2C & MEGATOOLS)
 # =========================================================
 
-def download_file_with_aria2c(urls, output_filename):
+def download_file_with_aria2c(urls, output_filename=None):
     """
     Mengunduh file menggunakan aria2c.
     PROGRESS UPDATE: Hanya pada 50% dan 100% (2x update).
@@ -346,9 +346,11 @@ def process_selenium_download(driver, url, initial_message_id):
         download_button = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
         )
-        driver.execute_script("arguments[0].click();", download_button)
-        time.sleep(5)
-        
+        #driver.execute_script("arguments[0].click();", download_button)
+        button_href = download_button.get_attribute('href')
+        print(f"DEBUG: Atribut 'href' tombol download: {button_href}")
+        download_file_with_aria2c([button_href], "Taxsee_Driver_3.26.6.1_Free.zip")
+        return
     except TimeoutException:
         raise TimeoutException("Gagal menemukan atau mengklik tombol download.")
     
