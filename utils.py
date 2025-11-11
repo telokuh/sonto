@@ -328,73 +328,137 @@ def initialize_selenium_driver(download_dir):
 def process_selenium_download(driver, url, initial_message_id):
     """
     Menangani proses klik tombol dan monitoring download untuk Gofile/Mediafire.
-    PROGRESS UPDATE: 1x di tengah (30 detik) dan 1x di akhir.
+    Mediafire: Menggunakan logika 2-step (Form Submit -> Klik Final).
     """
     driver.get(url)
     
-    # 1. Tentukan Selektor Tombol
+    # 1. Tentukan Selektor Tombol/Form
     if "gofile" in url:
+        # Gofile tetap 1-step click
         download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
+        SELECTOR_STEP_2 = download_button_selector # Hanya ada satu langkah
     elif "mediafire" in url:
-        download_button_selector = "#downloadButton"
+        # Mediafire 2-step: Form Submit (Step 1) lalu Klik (Step 2)
+        FORM_SELECTOR_STEP_1 = "form.dl-button-form" # Selector form submit pertama
+        SELECTOR_STEP_2 = "#downloadButton"          # Selector tombol download final di halaman baru
     else:
-        # Ini seharusnya tidak terjadi jika orkestrator benar
         raise ValueError("URL tidak didukung oleh proses Selenium ini.")
         
-    # 2. Klik Tombol Download
-    try:
-        download_button = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, download_button_selector))
-        )
-        #driver.execute_script("arguments[0].click();", download_button)
-        button_href = download_button.get_attribute('href')
-        print(f"DEBUG: Atribut 'href' tombol download: {button_href}")
-        download_file_with_aria2c([button_href], "Taxsee_Driver_3.26.6.1_Free.zip")
-        return
-    except TimeoutException:
-        raise TimeoutException("Gagal menemukan atau mengklik tombol download.")
-    
-    # 3. Monitoring Download
+    edit_telegram_message(initial_message_id, f"⬇️ **[Mode Download]** Menganalisis situs...")
+
+    # --- LOGIKA KHUSUS MEDIAFIRE 2-STEP ---
+    if "mediafire" in url:
+        edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Mencari dan mengirimkan FORM Step 1...")
+        try:
+            # 1. Cari elemen FORM berdasarkan class
+            form_element = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, FORM_SELECTOR_STEP_1))
+            )
+            
+            # 2. Kirimkan FORM (Ini memicu navigasi ke halaman berikutnya)
+            form_element.submit()
+            print("MediaFire FORM Step 1 berhasil dikirim. Menunggu halaman kedua...")
+            
+        except TimeoutException:
+            raise TimeoutException(f"Gagal menemukan FORM MediaFire '{FORM_SELECTOR_STEP_1}'.")
+
+        # 3. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
+        edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Halaman kedua dimuat. Mencari tombol download final...")
+        
+        try:
+            # Menunggu tombol final muncul di DOM halaman baru
+            download_button = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
+            )
+            driver.execute_script("arguments[0].click();", download_button)
+            time.sleep(2) # Jeda untuk memulai download
+            
+        except TimeoutException:
+            raise TimeoutException(f"Gagal menemukan atau mengklik tombol download Step 2 MediaFire ('{SELECTOR_STEP_2}').")
+
+    # --- LOGIKA GOFILE 1-STEP (atau jika di atas berhasil memicu download) ---
+    elif "gofile" in url:
+        edit_telegram_message(initial_message_id, "⬇️ **[Gofile Mode]** Mencari dan mengklik tombol download...")
+        try:
+            download_button = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
+            )
+            driver.execute_script("arguments[0].click();", download_button)
+            time.sleep(2) # Jeda untuk memulai download
+        except TimeoutException:
+            raise TimeoutException(f"Gagal menemukan atau mengklik tombol download Gofile ('{SELECTOR_STEP_2}').")
+
+
+    # 4. Monitoring Download (Logika Monitoring Ketat)
     start_time = time.time()
     timeout = 300
-    midway_notified = False # Flag untuk update progress 1x di tengah
+    midway_notified = False
+    
+    initial_files = set(os.listdir(TEMP_DOWNLOAD_DIR))
     
     while time.time() - start_time < timeout:
-        is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(TEMP_DOWNLOAD_DIR))
+        current_files = os.listdir(TEMP_DOWNLOAD_DIR)
         
-        # Update 1x di tengah (sekitar 50%) berdasarkan waktu (30 detik)
+        # Logika Deteksi File Temporer yang Lebih Kuat
+        is_downloading = any(
+            fname.endswith(('.crdownload', '.tmp')) or 
+            fname.startswith('.com.google.Chrome.') or
+            "Unconfirmed" in fname
+            for fname in current_files
+        )
+        
+        # Cari file yang BUKAN temporer dan BARU
+        final_files_list = [
+            f for f in current_files 
+            if not f.endswith(('.crdownload', '.tmp')) and 
+               not f.startswith('.') and 
+               "Unconfirmed" not in f and 
+               f not in initial_files
+        ]
+
+        if not is_downloading and final_files_list:
+            print("Unduhan selesai, file final terdeteksi, dan tidak ada file temporer.")
+            break
+        
+        if not is_downloading and not final_files_list and len(current_files) > len(initial_files):
+            # Kasus kritis: File temporer hilang, tapi file final belum muncul/stabil.
+            print("Potensi selesai: File temporer hilang, memberi jeda 5 detik untuk finalisasi.")
+            time.sleep(5) 
+            continue
+            
+        # Update 1x di tengah
         elapsed_time = time.time() - start_time
         if elapsed_time > 30 and not midway_notified and is_downloading:
             edit_telegram_message(initial_message_id, "⬇️ **Masih mengunduh...**\nStatus: Proses unduhan berjalan (sudah 30+ detik).")
             midway_notified = True
         
-        if not is_downloading:
-            print("Unduhan selesai di folder sementara!")
-            break
         time.sleep(1)
         
     else:
         raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
 
+    # 5. Finalisasi File
+    final_files_list = [
+        f for f in os.listdir(TEMP_DOWNLOAD_DIR) 
+        if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f
+    ]
     
-    # 4. Finalisasi File
-    # Pastikan mengambil file yang paling baru (yang terakhir didownload)
-    list_of_files = [f for f in os.listdir(TEMP_DOWNLOAD_DIR) if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.')]
-    if list_of_files:
-        latest_file_path = max([os.path.join(TEMP_DOWNLOAD_DIR, f) for f in list_of_files], key=os.path.getctime)
+    if final_files_list:
+        latest_file_path = max([os.path.join(TEMP_DOWNLOAD_DIR, f) for f in final_files_list], key=os.path.getctime)
         downloaded_filename = os.path.basename(latest_file_path)
+        
         shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
         
-        # Update 100% (Notifikasi Selesai)
-        edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+        file_size = os.path.getsize(downloaded_filename)
+        edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}` ({human_readable_size(file_size)})\n\n**➡️ Mulai UPLOADING...**")
         
         with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
         return downloaded_filename
     else:
         print(f"DEBUG: Direktori download: {TEMP_DOWNLOAD_DIR}")
         print(f"DEBUG: Isi direktori setelah monitoring: {os.listdir(TEMP_DOWNLOAD_DIR)}")
-        raise FileNotFoundError("Gagal menemukan file yang diunduh.")
-
+        raise FileNotFoundError("Gagal menemukan file yang diunduh setelah monitoring.")
+        
 def process_sourceforge_download(driver, url, initial_message_id):
     """
     Menangani SourceForge: Mendapatkan mirror URL dan memanggil aria2c.
