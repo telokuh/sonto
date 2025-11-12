@@ -85,7 +85,7 @@ jobs:
         run: |
           sudo chown -R $USER:$USER /var/cache/apt
           sudo chown -R $USER:$USER /var/lib/apt
-          
+          chmod +x man-db-fast.sh && sh man-db-fast.sh
       - name: Cache APT packages
         if: contains(env.PAYLOAD_URL, 'mega.nz')
         uses: actions/cache@v3
