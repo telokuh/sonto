@@ -415,7 +415,7 @@ def process_playwright_download(p, url, initial_message_id):
                 page.click(f"{SELECTOR_FORM} input[type='submit'], {SELECTOR_FORM} button[type='submit'], {SELECTOR_FORM} a", timeout=10000)
             except PlaywrightTimeoutError:
                 # Fallback: Coba submit via JS
-                page.evaluate(f"document.querySelector('{SELECTOR_FORM}').submit()")
+                page.evaluate('selector => document.querySelector(selector).submit()', SELECTOR_FORM)
             
             
             # 2. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
