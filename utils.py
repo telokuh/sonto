@@ -1,12 +1,6 @@
 import os
 import subprocess
 import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import time
 import json
 import re
@@ -15,8 +9,11 @@ import shutil
 import glob
 import math
 import sys
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
+
+# --- IMPOR BARU UNTUK PLAYWRIGHT ---
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+# ------------------------------------
 
 # =========================================================
 # KONSTANTA & KONFIGURASI
@@ -24,11 +21,11 @@ from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = os.environ.get("PAYLOAD_SENDER")
-# Tentukan directory untuk download sementara (hanya untuk Selenium)
+# Tentukan directory untuk download sementara (hanya untuk Playwright jika perlu)
 TEMP_DOWNLOAD_DIR = tempfile.mkdtemp()
 
 # =========================================================
-# FUNGSI BANTUAN TELEGRAM & UMUM
+# FUNGSI BANTUAN TELEGRAM & UMUM (TETAP SAMA)
 # =========================================================
 
 def send_telegram_message(message_text):
@@ -45,16 +42,12 @@ def send_telegram_message(message_text):
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
-        
-        # --- DEBUGGING TAMBAHAN ---
         response_json = response.json()
-        #print(f"DEBUG: Telegram Send Response: {response_json}")
-        # --------------------------
-
         return response_json.get('result', {}).get('message_id')
     except Exception as e:
         print(f"Gagal mengirim pesan Telegram: {e}")
         return None
+        
 def edit_telegram_message(message_id, message_text):
     """Mengedit pesan yang sudah ada di Telegram."""
     if not BOT_TOKEN or not OWNER_ID or not message_id:
@@ -91,8 +84,6 @@ def get_total_file_size_safe(url):
         pass # Lanjut ke metode streaming jika HEAD gagal
     
     # Mencoba mendapatkan ukuran melalui koneksi streaming
-    total_size = 0
-    # Cukup ambil chunk kecil di awal untuk estimasi jika perlu
     try:
         with requests.get(url, stream=True, timeout=30) as r:
             r.raise_for_status()
@@ -102,9 +93,39 @@ def get_total_file_size_safe(url):
         print(f"❌ Gagal mendapatkan ukuran file: {e}")
     return None
 
+def extract_filename_from_url_or_header(download_url):
+    """Mendapatkan nama file dari header Content-Disposition atau fallback ke path URL."""
+    file_name = None
+    try:
+        # Gunakan requests.head untuk mendapatkan header
+        head_response = requests.head(download_url, allow_redirects=True, timeout=10)
+        head_response.raise_for_status()
+        
+        cd_header = head_response.headers.get('Content-Disposition')
+        if cd_header:
+            # Mencari filename* (UTF-8) atau filename (simpel)
+            fname_match = re.search(r'filename\*?=["\']?(?:utf-8\'\')?([^"\';]+)["\']?', cd_header, re.I)
+            if fname_match:
+                file_name = fname_match.group(1).strip()
+                # Hapus karakter non-ASCII yang mungkin tersisa
+                file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
+
+        # Fallback terakhir jika header CD tidak ada atau gagal diuraikan
+        if not file_name:
+            url_path = urlparse(download_url).path
+            file_name = url_path.split('/')[-1]
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Peringatan: Gagal mendapatkan header file dari URL. Fallback ke nama dari path URL. Detail: {e}")
+        url_path = urlparse(download_url).path
+        file_name = url_path.split('/')[-1]
+        
+    return file_name if file_name else "unknown_file"
+
 # =========================================================
-# FUNGSI DOWNLOAD UTAMA (ARIA2C & MEGATOOLS)
+# FUNGSI DOWNLOAD UTAMA (ARIA2C & MEGATOOLS & YTDLP)
 # =========================================================
+# (Fungsi-fungsi ini TETAP sama dan bekerja dengan baik)
 
 def download_file_with_aria2c(urls, output_filename=None):
     """
@@ -299,435 +320,315 @@ def download_with_yt_dlp(url):
     return downloaded_filename
 
 # =========================================================
-# FUNGSI SELENIUM
+# FUNGSI PLAYWRIGHT (MENGGANTIKAN SEMUA FUNGSI SELENIUM)
 # =========================================================
 
-def initialize_selenium_driver(download_dir):
-    """Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless)."""
-    chrome_prefs = {
-        "download.default_directory": download_dir,
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": True,
-    }
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option("prefs", chrome_prefs)
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_experimental_option("mobileEmulation", {"deviceName": "Nexus 5"})
-    
+def process_playwright_download(p, url, initial_message_id):
+    """
+    Menangani SourceForge, Mediafire, Gofile, dan ApkAdmin menggunakan Playwright.
+    Mengutamakan ekstraksi link langsung untuk diserahkan ke aria2c.
+    """
+    browser = None
     try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        return driver
-    except Exception as e:
-        print(f"❌ Gagal inisialisasi Selenium Driver: {e}")
-        return None
-
-def process_selenium_download(driver, url, initial_message_id):
-    """
-    Menangani proses Gofile (1-step click) dan Mediafire (2-step: Form Submit -> Ekstraksi Link -> Aria2c).
-    """
-    driver.get(url)
-    downloaded_filename = None
-    
-    # 1. Tentukan Selektor Tombol/Form
-    if "gofile" in url:
-        # Gofile tetap 1-step click (Logika Monitoring Lama)
-        download_button_selector = "#filemanager_itemslist > div.border-b.border-gray-600 > div > div:nth-child(2) > div > button"
-        SELECTOR_STEP_2 = download_button_selector 
+        # Menggunakan Chromium dan mode Headless
+        browser = p.chromium.launch(headless=True)
+        # Membuat konteks browser dengan pengaturan unduhan khusus
+        context = browser.new_context(
+            ignore_https_errors=True,
+            java_script_enabled=True,
+            # Playwright akan mendownload ke TEMP_DOWNLOAD_DIR jika tidak dicegat
+            accept_downloads=True, 
+            downloads_path=TEMP_DOWNLOAD_DIR, 
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        )
+        page = context.new_page()
+        page.set_default_timeout(30000) # 30 detik timeout default
         
-    elif "mediafire" in url:
-        # Mediafire 2-step
-        FORM_SELECTOR_STEP_1 = "form.dl-btn-form" 
-        SELECTOR_STEP_2 = "#downloadButton"          
-    else:
-        raise ValueError("URL tidak didukung oleh proses Selenium ini.")
+        downloaded_filename = None
         
-    edit_telegram_message(initial_message_id, f"⬇️ **[Mode Download]** Menganalisis situs...")
-
-    # ====================================================================
-    # --- LOGIKA KHUSUS MEDIAFIRE: FORM SUBMIT + EKSTRAKSI LINK ---
-    # ====================================================================
-    if "mediafire" in url:
-        edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Mencari dan mengirimkan FORM Step 1...")
-        try:
+        # --- LOGIKA KHUSUS: SOURCEFORGE (Ekstraksi List Mirror) ---
+        if "sourceforge" in url:
+            
+            def source_url(download_url):
+                parsed_url = urlparse(download_url)
+                path_parts = parsed_url.path.split('/')
+                project_name = path_parts[2]
+                file_path = '/'.join(path_parts[4:]) # Sesuaikan index untuk mendapatkan path file yang benar
+                query_params = {'projectname': project_name, 'filename': file_path}
+                new_path = "/settings/mirror_choices"
+                new_url_parts = (parsed_url.scheme, parsed_url.netloc, new_path, '', urlencode(query_params), '')
+                return urlunparse(new_url_parts)
+            
+            def set_url(url, param_name, param_value):
+                parsed_url = urlparse(url)
+                query_params = parse_qs(parsed_url.query)
+                query_params[param_name] = [param_value]
+                new_query = urlencode(query_params, doseq=True)
+                return urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, parsed_url.params, new_query, parsed_url.fragment))
+            
+            edit_telegram_message(initial_message_id, f"🔍 **[SourceForge Mode]** Mengekstrak daftar mirror...")
+            
+            mirror_url = source_url(url)
+            page.goto(mirror_url)
+            
+            # 1. Ambil ID Mirror
+            page.wait_for_selector("ul#mirrorList > li", state="visible")
+            list_items = page.locator("ul#mirrorList > li").all()
+            li_id = [item.get_attribute("id") for item in list_items if item.get_attribute("id")]
+            
+            # 2. Ambil Nama File dan Base Link
+            page.goto(url)
+            page.wait_for_selector("#remaining-buttons > div.large-12 > a.button.green", state="visible")
+            download_button = page.locator("#remaining-buttons > div.large-12 > a.button.green")
+            
+            # Gunakan textContent untuk mendapatkan nama file
+            aname_locator = page.locator("#downloading > div.content > div.file-info > div")
+            aname = aname_locator.text_content() if aname_locator else "sourceforge_file"
+            
+            ahref = download_button.get_attribute('href')
+            
+            if not ahref or not li_id:
+                raise Exception("Gagal mendapatkan link dasar atau ID mirror SourceForge.")
+            
+            # 3. Buat Daftar URL Download Lengkap
+            download_urls = [set_url(ahref, 'use_mirror', mirror_id) for mirror_id in li_id]
+            
+            # 4. Panggil aria2c
+            edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{aname}`")
+            downloaded_filename = download_file_with_aria2c(download_urls, aname)
+            
+        # --- LOGIKA KHUSUS: APK ADMIN (2-Step Form Submit) ---
+        elif "apkadmin" in url:
+            edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Mencari dan mengirimkan FORM Step 1...")
+            
+            page.goto(url)
+            
             # 1. Kirimkan FORM
-            form_element = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, FORM_SELECTOR_STEP_1))
-            )
-            form_element.submit()
-            print("MediaFire FORM Step 1 berhasil dikirim. Menunggu halaman kedua...")
+            # Selector untuk FORM (atau tombol submit yang ada di dalamnya)
+            SELECTOR_FORM = "form[name='F1']"
+            page.wait_for_selector(SELECTOR_FORM, state="visible")
             
-        except TimeoutException:
-            raise TimeoutException(f"Gagal menemukan FORM MediaFire '{FORM_SELECTOR_STEP_1}'.")
-
-        # 2. Tunggu dan EKSTRAKSI URL dan NAMA FILE di Halaman Baru
-        edit_telegram_message(initial_message_id, "🔍 **[MediaFire Mode]** Halaman kedua dimuat. Mengekstrak URL Download Langsung...")
-        
-        try:
-            download_button = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_STEP_2))
-            )
+            # Playwright tidak memiliki .submit() untuk form Locator, jadi kita klik elemen submit di dalamnya atau menjalankan script
+            # Namun, karena ini adalah form submit klasik yang memicu navigasi, kita akan klik tombol di dalamnya
+            # Jika form tidak punya tombol, ini akan gagal. Kita coba klik tombol apapun yang ada.
+            try:
+                page.click(f"{SELECTOR_FORM} input[type='submit'], {SELECTOR_FORM} button[type='submit'], {SELECTOR_FORM} a", timeout=10000)
+            except PlaywrightTimeoutError:
+                # Fallback: Coba submit via JS
+                page.evaluate(f"document.querySelector('{SELECTOR_FORM}').submit()")
             
+            
+            # 2. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
+            SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
+            
+            edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Halaman kedua dimuat. Mencari tombol Step 2 (Max 30 detik)...")
+            
+            # Tunggu navigasi selesai dan tombol final muncul
+            page.wait_for_selector(SELECTOR_STEP_2, state="visible", timeout=30000)
+            
+            # Ekstraksi URL Langsung untuk diserahkan ke aria2c
+            download_button = page.locator(SELECTOR_STEP_2)
             final_download_url = download_button.get_attribute('href')
             
             if not final_download_url:
-                raise Exception("Atribut 'href' pada tombol download kosong.")
-
-            # --- PERBAIKAN: MENDAPATKAN NAMA FILE DARI HEADER ---
-            edit_telegram_message(initial_message_id, "🔍 **[MediaFire Mode]** Memeriksa header Content-Disposition...")
+                raise Exception("Gagal mengekstrak URL download final dari tombol ApkAdmin.")
             
-            file_name = None
-            try:
-                # Gunakan requests.head untuk mendapatkan header tanpa mengunduh seluruh file
-                head_response = requests.head(final_download_url, allow_redirects=True, timeout=10)
-                head_response.raise_for_status()
-                
-                # Mendapatkan nama file dari header Content-Disposition
-                cd_header = head_response.headers.get('Content-Disposition')
-                if cd_header:
-                    fname_match = re.search(r'filename\*?=["\']?(?:utf-8\'\')?([^"\';]+)["\']?', cd_header, re.I)
-                    if fname_match:
-                        file_name = fname_match.group(1).strip()
-                        # Hapus karakter non-ASCII yang mungkin tersisa
-                        file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-                    else:
-                        # Fallback: Cari nama setelah 'filename='
-                        fname_match_simple = re.search(r'filename=["\']?([^"\';]+)["\']?', cd_header, re.I)
-                        if fname_match_simple:
-                             file_name = fname_match_simple.group(1).strip()
-                             file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-
-                # Fallback terakhir jika header CD tidak ada atau gagal diuraikan
-                if not file_name:
-                    url_path = urlparse(final_download_url).path
-                    file_name = url_path.split('/')[-1]
-                
-            except requests.exceptions.RequestException as e:
-                print(f"Peringatan: Gagal mendapatkan header file dari URL. Fallback ke nama dari path URL. Detail: {e}")
-                url_path = urlparse(final_download_url).path
-                file_name = url_path.split('/')[-1]
+            # 3. Mendapatkan Nama File dan Panggil aria2c
+            file_name = extract_filename_from_url_or_header(final_download_url)
             
-            # --- END OF HEADER EXTRACTION ---
-
-            print(f"Ekstraksi Berhasil! URL: {final_download_url}, Nama File Dikonfirmasi: {file_name}")
-            
-            # --- PANGGIL ARIA2C ---
             edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
             downloaded_filename = download_file_with_aria2c([final_download_url], file_name)
             
-            # --- FINALISASI ARIA2C ---
-            if downloaded_filename:
-                edit_telegram_message(initial_message_id, f"✅ **MediaFire: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
-                with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-            else:
-                raise Exception("Aria2c gagal mengunduh file.")
+        # --- LOGIKA KHUSUS: MEDIAFIRE (Form Submit + Ekstraksi Link) ---
+        elif "mediafire" in url:
+            edit_telegram_message(initial_message_id, "⬇️ **[MediaFire Mode]** Mencari tombol download...")
+            page.goto(url)
+            
+            # Selektor tombol download di MediaFire
+            SELECTOR_BUTTON = "#downloadButton"
+            
+            # Tunggu tombol muncul
+            page.wait_for_selector(SELECTOR_BUTTON, state="visible")
+            
+            download_button = page.locator(SELECTOR_BUTTON)
+            final_download_url = download_button.get_attribute('href')
+            
+            if not final_download_url or final_download_url.startswith('javascript:'):
+                # Jika link tidak langsung (Mediafire kadang-kadang menggunakan form/js click)
+                edit_telegram_message(initial_message_id, "⚠️ **[MediaFire Mode]** Link tidak langsung. Mencoba klik tombol...")
                 
-            return downloaded_filename
-            
-        except TimeoutException:
-            raise TimeoutException(f"Gagal menemukan elemen tombol download final MediaFire ('{SELECTOR_STEP_2}').")
-        except Exception as e:
-            raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
+                # Memantau respons yang berisi file (biasanya respons terakhir adalah file)
+                # Gunakan event response untuk mencegat URL
+                final_download_url = None
+                file_name = None
+                
+                # Menggunakan event handler request/response untuk menangkap pengalihan terakhir
+                def handle_response(response):
+                    nonlocal final_download_url, file_name
+                    # Hanya fokus pada URL yang responsnya berupa file
+                    if response.url.endswith(('.zip', '.rar', '.7z', '.exe', '.apk', '.mp4', '.pdf', '.iso', '.bin', '.gz', '.tgz', '.tar')) or response.url.endswith(('/file', '/dl')):
+                        if 'content-disposition' in response.headers:
+                            final_download_url = response.url
+                            file_name = extract_filename_from_url_or_header(final_download_url)
+                            # Hapus event handler setelah menemukan link
+                            page.remove_listener("response", handle_response)
 
-    # --- LOGIKA GOFILE 1-STEP (atau jika di atas berhasil memicu download) ---
-    elif "gofile" in url:
-        edit_telegram_message(initial_message_id, "⬇️ **[Gofile Mode]** Mencari dan mengklik tombol download...")
+                page.on("response", handle_response)
+                
+                # Klik tombol
+                page.click(SELECTOR_BUTTON)
+                page.wait_for_timeout(5000) # Beri waktu 5 detik untuk pengalihan
+                
+                if not final_download_url:
+                    # Fallback: Ambil href tombol setelah klik (jika berubah)
+                    final_download_url = page.locator(SELECTOR_BUTTON).get_attribute('href')
+            
+            if not final_download_url:
+                raise Exception("Gagal mendapatkan URL download langsung MediaFire.")
+
+            # 4. Mendapatkan Nama File dan Panggil aria2c
+            file_name = extract_filename_from_url_or_header(final_download_url)
+            
+            edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
+            downloaded_filename = download_file_with_aria2c([final_download_url], file_name)
+            
+        # --- LOGIKA KHUSUS: GOFILE (Ekstraksi Link Langsung) ---
+        elif "gofile" in url:
+            # Gofile butuh 1-step click untuk memunculkan link download
+            edit_telegram_message(initial_message_id, "⬇️ **[Gofile Mode]** Mencari tombol download...")
+            page.goto(url)
+            
+            # Selektor Tombol Download Gofile
+            download_button_selector = "button.download-btn" 
+            
+            # Tunggu tombol muncul
+            page.wait_for_selector(download_button_selector, state="visible")
+            
+            download_button = page.locator(download_button_selector)
+            
+            # Memantau event download untuk mendapatkan URL dan nama file
+            with page.expect_download(timeout=30000) as download_info:
+                download_button.click()
+                
+            download = download_info.value
+            final_download_url = download.url
+            file_name = download.suggested_filename
+            
+            if not final_download_url:
+                raise Exception("Gagal mendapatkan URL download langsung Gofile.")
+                
+            # Gofile mungkin menggunakan download API Playwright, jadi kita cek dulu
+            if download:
+                # Gunakan Playwright untuk mengunduh dan menyimpannya (untuk kasus yang tidak bisa menggunakan aria2c)
+                edit_telegram_message(initial_message_id, f"⬇️ **[Gofile Mode]** Unduhan dipicu. Playwright akan mengelola file.")
+                
+                # Menyimpan file yang diunduh (Playwright)
+                download_path = os.path.join(os.getcwd(), file_name)
+                download.save_as(download_path)
+                
+                downloaded_filename = file_name
+                file_size = os.path.getsize(downloaded_filename)
+                edit_telegram_message(initial_message_id, f"✅ **Gofile: Unduhan selesai!**\nFile: `{downloaded_filename}` ({human_readable_size(file_size)})\n\n**➡️ Mulai UPLOADING...**")
+                
+            else:
+                # Fallback ke aria2c jika event download tidak terpicu
+                file_name = extract_filename_from_url_or_header(final_download_url)
+                edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
+                downloaded_filename = download_file_with_aria2c([final_download_url], file_name)
+            
+        else:
+            raise ValueError("URL tidak didukung oleh proses Playwright ini.")
+            
+        return downloaded_filename
+        
+    except PlaywrightTimeoutError as e:
+        print(f"❌ Playwright Timeout: {e}")
+        # Coba ambil screenshot untuk debugging
+        page.screenshot(path="debug_timeout.png")
+        print("Screenshot disimpan di debug_timeout.png")
+        raise Exception(f"Playwright Timeout! Gagal menemukan elemen: {e}")
+        
+    except Exception as e:
+        print(f"❌ Playwright Gagal: {e}")
+        raise
+        
+    finally:
+        if browser:
+            browser.close()
+            
+
+# =========================================================
+# FUNGSI UTAMA (ORCHESTRATOR) - Menggunakan Wrapper Sync Playwright
+# =========================================================
+
+def main_downloader_async(url, initial_message_id):
+    """
+    Fungsi utama (async) yang menjalankan logika Playwright.
+    """
+    downloaded_filename = None
+    
+    # 1. LOGIKA MEGATOOLS (MEGA)
+    if "mega.nz" in url:
+        downloaded_filename = download_file_with_megatools(url)
+        
+    # 2. LOGIKA YT-DLP (Google Drive)
+    elif any(d in url for d in ["drive.google.com", "googledrive.com"]):
+        downloaded_filename = download_with_yt_dlp(url)
+        
+    # 3. LOGIKA PIXELDRAIN (API + Aria2c)
+    elif "pixeldrain" in url:
+        print("Mode: Pixeldrain (Ambil Info File)")
+        file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
+        if not file_id_match: raise ValueError("URL Pixeldrain tidak valid.")
+        file_id = file_id_match.group(2)
+        info_url = f"https://pixeldrain.com/api/file/{file_id}/info"
+        edit_telegram_message(initial_message_id, f"🔍 **Mendapatkan informasi file dari Pixeldrain...** ID: `{file_id}`")
         try:
-            download_button = WebDriverWait(driver, 20).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
-            )
-            driver.execute_script("arguments[0].click();", download_button)
-            time.sleep(2) # Jeda untuk memulai download
-        except TimeoutException:
-            raise TimeoutException(f"Gagal menemukan atau mengklik tombol download Gofile ('{SELECTOR_STEP_2}').")
-
-
-    # 4. Monitoring Download (Logika Monitoring Ketat)
-    start_time = time.time()
-    timeout = 300
-    midway_notified = False
-    
-    initial_files = set(os.listdir(TEMP_DOWNLOAD_DIR))
-    
-    while time.time() - start_time < timeout:
-        current_files = os.listdir(TEMP_DOWNLOAD_DIR)
+            info_resp = requests.get(info_url, timeout=10)
+            info_resp.raise_for_status()
+            file_info = info_resp.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Gagal koneksi ke API Pixeldrain: {e}")
         
-        # Logika Deteksi File Temporer yang Lebih Kuat
-        is_downloading = any(
-            fname.endswith(('.crdownload', '.tmp')) or 
-            fname.startswith('.com.google.Chrome.') or
-            "Unconfirmed" in fname
-            for fname in current_files
-        )
+        filename = file_info.get('name', f"pixeldrain_download_{file_id}")
+        download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
         
-        # Cari file yang BUKAN temporer dan BARU
-        final_files_list = [
-            f for f in current_files 
-            if not f.endswith(('.crdownload', '.tmp')) and 
-               not f.startswith('.') and 
-               "Unconfirmed" not in f and 
-               f not in initial_files
-        ]
-
-        if not is_downloading and final_files_list:
-            print("Unduhan selesai, file final terdeteksi, dan tidak ada file temporer.")
-            break
+        edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`")
+        downloaded_filename = download_file_with_aria2c([download_url], filename)
         
-        if not is_downloading and not final_files_list and len(current_files) > len(initial_files):
-            # Kasus kritis: File temporer hilang, tapi file final belum muncul/stabil.
-            print("Potensi selesai: File temporer hilang, memberi jeda 5 detik untuk finalisasi.")
-            time.sleep(5) 
-            continue
+        if downloaded_filename:
+            edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+            with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
+        
+    # 4. LOGIKA PLAYWRIGHT (SourceForge, Gofile, Mediafire, ApkAdmin)
+    elif any(d in url for d in ["sourceforge", "gofile", "mediafire", "apkadmin"]):
+        
+        edit_telegram_message(initial_message_id, "⏳ **[Mode Playwright]** Menginisialisasi browser headless...")
+        
+        with sync_playwright() as p:
+            downloaded_filename = process_playwright_download(p, url, initial_message_id)
             
-        # Update 1x di tengah
-        elapsed_time = time.time() - start_time
-        if elapsed_time > 30 and not midway_notified and is_downloading:
-            edit_telegram_message(initial_message_id, "⬇️ **Masih mengunduh...**\nStatus: Proses unduhan berjalan (sudah 30+ detik).")
-            midway_notified = True
-        
-        time.sleep(1)
-        
     else:
-        raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
+        # Fallback untuk URL unduhan langsung
+        edit_telegram_message(initial_message_id, "⬇️ **[Mode Default]** Mencoba unduhan langsung dengan `aria2c`...")
+        file_name = extract_filename_from_url_or_header(url)
+        downloaded_filename = download_file_with_aria2c([url], file_name)
 
-    # 5. Finalisasi File
-    final_files_list = [
-        f for f in os.listdir(TEMP_DOWNLOAD_DIR) 
-        if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f
-    ]
-    
-    if final_files_list:
-        latest_file_path = max([os.path.join(TEMP_DOWNLOAD_DIR, f) for f in final_files_list], key=os.path.getctime)
-        downloaded_filename = os.path.basename(latest_file_path)
-        
-        shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
-        
-        file_size = os.path.getsize(downloaded_filename)
-        edit_telegram_message(initial_message_id, f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}` ({human_readable_size(file_size)})\n\n**➡️ Mulai UPLOADING...**")
-        
-        with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-        return downloaded_filename
-    else:
-        print(f"DEBUG: Direktori download: {TEMP_DOWNLOAD_DIR}")
-        print(f"DEBUG: Isi direktori setelah monitoring: {os.listdir(TEMP_DOWNLOAD_DIR)}")
-        raise FileNotFoundError("Gagal menemukan file yang diunduh setelah monitoring.")
-        
-def process_sourceforge_download(driver, url, initial_message_id):
-    """
-    Menangani SourceForge: Mendapatkan mirror URL dan memanggil aria2c.
-    Menggunakan aria2c yang sudah 2x update.
-    """
-    
-    def source_url(download_url):
-        parsed_url = urlparse(download_url)
-        path_parts = parsed_url.path.split('/')
-        project_name = path_parts[2]
-        file_path = '/'.join(path_parts[4:-1])
-        query_params = {'projectname': project_name, 'filename': file_path}
-        new_path = "/settings/mirror_choices"
-        new_url_parts = (parsed_url.scheme, parsed_url.netloc, new_path, '', urlencode(query_params), '')
-        return urlunparse(new_url_parts)
-    
-    def set_url(url, param_name, param_value):
-        parsed_url = urlparse(url)
-        query_params = parse_qs(parsed_url.query)
-        query_params[param_name] = [param_value]
-        new_query = urlencode(query_params, doseq=True)
-        return urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, parsed_url.params, new_query, parsed_url.fragment))
-    
-    mirror_url = source_url(url)
-    driver.get(mirror_url)
-    
-    # 1. Ambil ID Mirror
-    list_items = WebDriverWait(driver, 10).until(
-        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul#mirrorList > li"))
-    )
-    li_id = [item.get_attribute("id") for item in list_items]
-    
-    # 2. Ambil Nama File dan Base Link
-    driver.get(url)
-    download_button = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, "#remaining-buttons > div.large-12 > a.button.green"))
-    )
-    aname = WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located((By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div"))
-    ).text
-    ahref = download_button.get_attribute('href')
-    
-    # 3. Buat Daftar URL Download Lengkap
-    download_urls = [set_url(ahref, 'use_mirror', mirror_id) for mirror_id in li_id]
-    
-    # 4. Panggil aria2c
-    edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{aname}`")
-    downloaded_filename = download_file_with_aria2c(download_urls, aname)
-    
-    if downloaded_filename:
-        edit_telegram_message(initial_message_id, f"✅ **SourceForge: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
-        with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-    
+        if downloaded_filename:
+            edit_telegram_message(initial_message_id, f"✅ **Unduhan Langsung: Selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+            with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
+            
     return downloaded_filename
-
-def process_apkadmin_download(driver, url, initial_message_id):
-    """
-    Menangani proses dua kali klik tombol download (seperti pada Apk Admin)
-    di mana klik pertama memicu NAVIGASI/FORM SUBMIT ke halaman baru.
-    """
-    driver.get(url)
     
-    # Selector untuk FORM (atau tombol submit yang ada di dalamnya)
-    SELECTOR_FORM = "form[name='F1']"
-    
-    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Mencari dan mengirimkan FORM Step 1...")
-    
-    try:
-        # 1. Cari elemen FORM berdasarkan name='F1'
-        form_element = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_FORM))
-        )
-        
-        # 2. Kirimkan FORM. Ini akan memicu navigasi ke halaman berikutnya.
-        form_element.submit()
-        
-        print("FORM Step 1 berhasil dikirim (submit). Menunggu halaman kedua dimuat...")
-    except TimeoutException:
-        raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
-
-    # 2. Tunggu dan Klik Tombol Download Kedua (Final) di Halaman Baru
-    # Selector ini tetap digunakan untuk halaman kedua:
-    SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
-    
-    
-    edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Halaman kedua dimuat. Mencari tombol Step 2 (Max 45 detik)...")
-    
-    try:
-        # Menunggu tombol final muncul di DOM halaman baru
-        # Waktu tunggu 45 detik (perbaikan sebelumnya)
-        download_button = WebDriverWait(driver, 30).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
-        )
-        driver.execute_script("arguments[0].click();", download_button)
-        time.sleep(1)
-    except TimeoutException:
-        current_url = driver.current_url
-        page_source_start = driver.page_source[:500]
-        print(f"DEBUG: URL saat gagal: {current_url}")
-        print(f"DEBUG: Awal source code: {page_source_start}...")
-        raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 2 (SELECTOR_STEP_2). Cek URL/Selector.")
-
-    # 3. Monitoring Download (Sama seperti sebelumnya)
-    # [LANJUTKAN DENGAN LOGIKA MONITORING DOWNLOAD SEPERTI SEBELUMNYA]
-    # ...
-    
-    start_time = time.time()
-    timeout = 300
-    midway_notified = False
-    
-    while time.time() - start_time < timeout:
-        is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or fname.startswith('.com.google.Chrome.') for fname in os.listdir(TEMP_DOWNLOAD_DIR))
-        
-        elapsed_time = time.time() - start_time
-        if elapsed_time > 30 and not midway_notified and is_downloading:
-            edit_telegram_message(initial_message_id, "⬇️ **[Apk Admin Mode]** Proses unduhan berjalan (sudah 30+ detik).")
-            midway_notified = True
-        
-        if not is_downloading:
-            print("Unduhan selesai di folder sementara!")
-            break
-        time.sleep(1)
-        
-    else:
-        raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
-
-    # 4. Finalisasi File
-    list_of_files = [f for f in os.listdir(TEMP_DOWNLOAD_DIR) if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.')]
-    if list_of_files:
-        latest_file_path = max([os.path.join(TEMP_DOWNLOAD_DIR, f) for f in list_of_files], key=os.path.getctime)
-        downloaded_filename = os.path.basename(latest_file_path)
-        shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
-        
-        edit_telegram_message(initial_message_id, f"✅ **[Apk Admin Mode] Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
-        
-        with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-        return downloaded_filename
-    else:
-        raise FileNotFoundError("Gagal menemukan file yang diunduh.")
-# =========================================================
-# FUNGSI UTAMA (ORCHESTRATOR)
-# =========================================================
-
 def downloader(url):
     """
-    Fungsi utama yang mengarahkan URL ke penangan yang tepat (Selenium, yt-dlp, atau aria2c).
+    Fungsi utama sinkron yang memanggil fungsi asinkron.
     """
     initial_message_id = send_telegram_message(f"⏳ **Menganalisis URL...**\nURL: `{url}`")
     downloaded_filename = None
-    driver = None
     
     try:
-        # 1. LOGIKA YT-DLP (Google Drive)
-        if "apkadmin" in url.lower(): # Menggunakan penanda khusus 'apkadmin'
-            print("Mode: Apk Admin (Selenium 2-Step)")
-            driver = initialize_selenium_driver(TEMP_DOWNLOAD_DIR)
-            if not driver: raise Exception("Gagal inisialisasi driver Selenium.")
-            downloaded_filename = process_apkadmin_download(driver, url, initial_message_id)
-        # 2. LOGIKA MEGATOOLS (MEGA)
-        elif "mega.nz" in url:
-            downloaded_filename = download_file_with_megatools(url)
-        
-        # 3. LOGIKA SELENIUM (SourceForge, Gofile, Mediafire)
-        elif "sourceforge" in url or "gofile" in url or "mediafire" in url:
-            driver = initialize_selenium_driver(TEMP_DOWNLOAD_DIR)
-            if not driver: raise Exception("Gagal inisialisasi driver Selenium.")
-            
-            if "sourceforge" in url:
-                downloaded_filename = process_sourceforge_download(driver, url, initial_message_id)
-            elif "gofile" in url or "mediafire" in url:
-                downloaded_filename = process_selenium_download(driver, url, initial_message_id)
-
-        # 4. LOGIKA PIXELDRAIN (Ambil info file sebelum download)
-        elif "pixeldrain" in url:
-            print("Mode: Pixeldrain (Ambil Info File)")
-            
-            file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', url)
-            if not file_id_match: raise ValueError("URL Pixeldrain tidak valid.")
-            file_id = file_id_match.group(2)
-            
-            # --- LANGKAH 1: Ambil Nama File dari API ---
-            info_url = f"https://pixeldrain.com/api/file/{file_id}/info"
-            
-            edit_telegram_message(initial_message_id, f"🔍 **Mendapatkan informasi file dari Pixeldrain...** ID: `{file_id}`")
-            
-            try:
-                info_resp = requests.get(info_url, timeout=10)
-                info_resp.raise_for_status()
-                file_info = info_resp.json()
-            except requests.exceptions.RequestException as e:
-                raise Exception(f"Gagal koneksi ke API Pixeldrain: {e}")
-            
-            if file_info.get('success') and file_info.get('name'):
-                filename = file_info['name']
-            else:
-                # Fallback jika API tidak memberikan nama
-                print("⚠️ API Pixeldrain tidak memberikan nama file yang valid. Menggunakan fallback.")
-                filename = f"pixeldrain_download_{file_id}"
-            
-            # --- LANGKAH 2: Download Menggunakan Nama yang Benar ---
-            download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
-            
-            edit_telegram_message(initial_message_id, f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`")
-            downloaded_filename = download_file_with_aria2c([download_url], filename)
-            
-            if downloaded_filename:
-                edit_telegram_message(initial_message_id, f"✅ **Pixeldrain: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
-                with open("downloaded_filename.txt", "w") as f: f.write(downloaded_filename)
-        else:
-            raise ValueError("URL tidak dikenali atau tidak didukung.")
-
-        if downloaded_filename:
-            return downloaded_filename
+        downloaded_filename = main_downloader_async(url, initial_message_id)
         
     except Exception as e:
         print(f"❌ Unduhan utama gagal: {e}")
@@ -735,9 +636,6 @@ def downloader(url):
         downloaded_filename = None
         
     finally:
-        if driver:
-            driver.quit()
         # Bersihkan folder temp SELALU
         shutil.rmtree(TEMP_DOWNLOAD_DIR, ignore_errors=True)
         return downloaded_filename
-
