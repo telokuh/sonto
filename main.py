@@ -1,12 +1,16 @@
 import os
 import re
+# Mengasumsikan semua fungsi helper (send_telegram_message, aria2c, megatools, yt-dlp, dan TENTU SAJA downloader Playwright)
+# sekarang berada di file utama yang diimpor atau di file `utils`.
+# Saya akan mengasumsikan fungsi inti Playwright kita (`downloader`) ada di `utils`.
 from utils import (
     send_telegram_message,
     edit_telegram_message,
     download_with_yt_dlp,
     download_file_with_aria2c,
     download_file_with_megatools,
-    downloader
+    # Fungsi `downloader` yang sekarang berisi logika Playwright, Pixeldrain, MEGA, dan Fallback
+    downloader 
 )
 
 # Dapatkan URL halaman dari environment variable
@@ -26,34 +30,30 @@ def main_downloader(url):
     downloaded_filename = None
 
     # --- Logika Berjenjang ---
-    if re.match(MEGA_URL_REGEX, url):
-        print("MEGA. Menggunakan megatools...")
-        
-        downloaded_filename = download_file_with_megatools(url)
+    # Kita akan memanggil fungsi `downloader(url)` yang baru untuk semua URL.
+    # Fungsi `downloader` yang baru sudah berisi logika untuk:
+    # 1. MEGA (memanggil megatools)
+    # 2. Google Drive (memanggil yt-dlp)
+    # 3. Pixeldrain (memanggil API + aria2c)
+    # 4. SourceForge/Mediafire/Gofile/ApkAdmin (memanggil Playwright + aria2c)
+    # 5. Fallback URL Langsung (memanggil aria2c)
     
-    elif "apkadmin" in url or "pixeldrain" in url or "mediafire" in url or "gofile" in url or "sourceforge" in url:
-        print(" Menggunakan Selenium...")
-        downloaded_filename = downloader(url)
-        
-
-    else:
-        # Coba yt-dlp sebagai opsi universal
-        print("URL tidak cocok dengan pola khusus. Mencoba dengan yt-dlp...")
-        yt_dlp_success = download_with_yt_dlp(url)
-        if yt_dlp_success:
-            downloaded_filename = yt_dlp_success
-        else:
-            # Fallback ke aria2c jika yt-dlp gagal
-            print("yt-dlp gagal. Mencoba dengan aria2c sebagai cadangan...")
-            downloaded_filename = download_file_with_aria2c([url], url)
+    print("Mengarahkan ke fungsi downloader tunggal yang terpusat (Playwright/API/Fallback)...")
+    downloaded_filename = downloader(url)
+    
+    # Keterangan: Logika pemeriksaan URL khusus MEGA, Pixeldrain, dll.
+    # pada dasarnya telah dipindahkan dan disentralisasi di dalam fungsi `downloader` itu sendiri.
     
     if downloaded_filename:
+        # Menghapus notifikasi awal (opsional) atau membuat notifikasi akhir
+        edit_telegram_message(initial_message_id, f"✅ **Proses Unduhan Selesai.**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
         with open("downloaded_filename.txt", "w") as f:
             f.write(downloaded_filename)
         
     else:
-        print(f"{downloaded_filename} Tidak dapat menemukan URL unduhan. Proses dihentikan.")
-        send_telegram_message(f"{downloaded_filename} ❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
+        print(f"❌ Tidak dapat menemukan URL unduhan atau proses gagal. Proses dihentikan.")
+        # Pesan kegagalan sudah dikirim oleh fungsi `downloader` sebelumnya, tapi kita bisa update yang ini.
+        edit_telegram_message(initial_message_id, f"❌ **Proses gagal.**\nTidak dapat menemukan URL unduhan.")
         exit(1)
 
 # Panggil fungsi utama dengan URL dari environment variable
