@@ -121,12 +121,12 @@ jobs:
 
       - name: dependency pip
         run: |
-          playwright install --with-deps
           python -m venv .venv
           source .venv/bin/activate
           echo ".venv/bin" >> $GITHUB_PATH
           if [ "${{ steps.cache-venv.outputs.cache-hit }}" != "true" ]; then
           pip install -r requirements.txt
+          python -m playwright install --with-deps
           fi
 
 # -----------------------------------------------------------------------------
