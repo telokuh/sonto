@@ -474,11 +474,14 @@ class DownloaderBot:
         
         return downloaded_filename
 
+
     def _process_apkadmin_download(self):
         """
         Menangani proses Apk Admin: submit form dan mengekstrak URL download 
         langsung dari log jaringan (CDP Network Logging) dengan memprioritaskan 
         URL yang berakhiran .apk atau .zip.
+        
+        ⚠️ DEBUG: Mencetak SEMUA URL respons ke konsol.
         """
         driver = self.driver
         driver.get(self.url)
@@ -510,6 +513,8 @@ class DownloaderBot:
             # Regex untuk mencari URL yang mengandung ekstensi .apk atau .zip
             FILE_EXTENSION_REGEX = re.compile(r'\.(apk|zip)$', re.I)
             
+            print("\n--- LOG JARINGAN PENUH (SEMUA URL RESPON) ---")
+            
             # Memproses dan memfilter log
             for entry in logs:
                 log_json = json.loads(entry['message'])
@@ -521,9 +526,13 @@ class DownloaderBot:
                     url = response.get('url')
                     status = response.get('status')
                     
-                    # Kriteria filter yang direvisi: Cari ekstensi .apk atau .zip
+                    # ✅ PRINT SEMUA URL RESPON KE CONSOLE (Sesuai permintaan Anda)
+                    print(f"[STATUS: {status}] {url}")
+                    
+                    # Logika filtering yang sebenarnya untuk menemukan file download
                     is_download_candidate = (
-                        status == 200 and 
+                        status == 200 and
+                        "apkadmin" not in url and # Abaikan URL internal Apk Admin
                         FILE_EXTENSION_REGEX.search(url) # Mencocokkan ekstensi yang diminta
                     )
                     
@@ -535,6 +544,8 @@ class DownloaderBot:
                             'url': url,
                             'size': size
                         })
+            
+            print("--- AKHIR LOG JARINGAN ---")
                         
             # Urutkan berdasarkan ukuran file terbesar
             if network_requests:
