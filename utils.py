@@ -3,10 +3,11 @@ import subprocess
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import undetected_chromedriver as uc # PENTING!
 import time
 import json
 import re
@@ -15,9 +16,7 @@ import shutil
 import glob
 import math
 import sys
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from urllib.parse import urlparse, urlunparse, urlencode, parse_qs
-
 # =========================================================
 # CLASS UTAMA: DownloaderBot
 # =========================================================
@@ -259,33 +258,51 @@ class DownloaderBot:
 
     def _initialize_selenium_driver(self):
         """
-        Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless).
+        Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless) 
+        menggunakan undetected_chromedriver (uc) untuk menghindari deteksi bot.
         Mengaktifkan Performance Logging untuk CDP Network Events.
         """
+        import undetected_chromedriver as uc
+        
         chrome_prefs = {
             "download.default_directory": self.temp_download_dir,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "safebrowsing.enabled": True,
         }
-        options = webdriver.ChromeOptions()
+        
+        options = uc.ChromeOptions()
+        
+        # Tambahkan preferensi untuk download
         options.add_experimental_option("prefs", chrome_prefs)
-        options.add_argument('--headless')
+        
+        # PENTING: undetectable-chromedriver seringkali berfungsi lebih baik TANPA --headless
+        # Namun, kita akan menyertakannya sebagai opsi, tapi disarankan untuk uji coba tanpa ini.
+        options.add_argument('--headless=new') # Menggunakan mode headless baru (lebih stealth)
+        
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
-        options.add_experimental_option("mobileEmulation", {"deviceName": "Nexus 5"})
+        options.add_argument('--start-maximized') # Argumen stealth tambahan
         
-        # AKTIFKAN PERFORMANCE LOGGING
+        # AKTIFKAN PERFORMANCE LOGGING (CDP) - Kompatibel dengan uc
+        options.add_argument('--enable-logging')
+        options.add_argument('--v=1')
         options.set_capability('goog:loggingPrefs', {'performance': 'ALL'}) 
         
         try:
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=options)
+            # uc.Chrome secara otomatis mengunduh chromedriver yang anti-deteksi jika diperlukan
+            # dan menerapkan opsi stealth internal.
+            self.driver = uc.Chrome(options=options,
+                                    use_subprocess=True,
+                                    headless=True) # Tambahkan argumen headless langsung ke inisialisasi
+            
+            # Set timeout setelah inisialisasi driver
+            self.driver.set_page_load_timeout(60) 
+            
             return True
         except Exception as e:
-            print(f"❌ Gagal inisialisasi Selenium Driver: {e}")
+            print(f"❌ Gagal inisialisasi Selenium Driver dengan uc: {e}")
             return False
-
     def _process_selenium_download(self):
         """
         Menangani Gofile, Mediafire, dan AGGRESIVE CLICKING.
