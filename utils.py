@@ -491,8 +491,11 @@ class DownloaderBot:
         
         return downloaded_filename
 
-    def _process_apkadmin_download(self):
-        """Menangani proses dua kali klik tombol download (seperti pada Apk Admin)."""
+def _process_apkadmin_download(self):
+        """
+        Menangani proses dua kali klik tombol download (seperti pada Apk Admin),
+        mengekstraksi URL final dari tombol di halaman kedua, lalu memanggil aria2c.
+        """
         driver = self.driver
         driver.get(self.url)
         
@@ -500,6 +503,7 @@ class DownloaderBot:
         self._edit_telegram_message("⬇️ **[Apk Admin Mode]** Mencari dan mengirimkan FORM Step 1...")
         
         try:
+            # 1. KLIK/SUBMIT FORM PERTAMA (Pindah ke halaman kedua)
             form_element = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_FORM))
             )
@@ -507,61 +511,40 @@ class DownloaderBot:
         except TimeoutException:
             raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
+        # 2. EKSTRAKSI URL LANGSUNG DARI TOMBOL DOWNLOAD DI HALAMAN KEDUA
         SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
         
-        self._edit_telegram_message("⬇️ **[Apk Admin Mode]** Halaman kedua dimuat. Mencari tombol Step 2 (Max 30 detik)...")
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Halaman kedua dimuat. Mengekstrak URL Download Langsung...")
         
         try:
+            # Tunggu tombol step 2 muncul
             download_button = WebDriverWait(driver, 30).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, SELECTOR_STEP_2))
+                EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_STEP_2))
             )
-            driver.execute_script("arguments[0].click();", download_button)
-            time.sleep(1)
+            
+            # Ambil atribut 'href' yang berisi URL download langsung
+            final_download_url = download_button.get_attribute('href')
+            
+            if not final_download_url:
+                raise Exception("Atribut 'href' pada tombol download Step 2 kosong.")
+
+            # Dapatkan nama file yang benar dari header HTTP (lebih akurat)
+            file_name = self._extract_filename_from_url_or_header(final_download_url)
+            
         except TimeoutException:
-            raise TimeoutException("Gagal menemukan atau mengklik tombol download Step 2 (SELECTOR_STEP_2). Cek URL/Selector.")
-
-        # Monitoring Download
-        start_time = time.time()
-        timeout = 300
-        midway_notified = False
-        initial_files = set(os.listdir(self.temp_download_dir))
+            raise TimeoutException("Gagal menemukan elemen tombol download Step 2 (SELECTOR_STEP_2).")
+        except Exception as e:
+            raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
         
-        while time.time() - start_time < timeout:
-            current_files = os.listdir(self.temp_download_dir)
-            is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or "Unconfirmed" in fname for fname in current_files)
-            final_files_list = [
-                f for f in current_files 
-                if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f and f not in initial_files
-            ]
-
-            if not is_downloading and final_files_list: break
-            
-            elapsed_time = time.time() - start_time
-            if elapsed_time > 30 and not midway_notified and is_downloading:
-                self._edit_telegram_message("⬇️ **[Apk Admin Mode]** Proses unduhan berjalan (sudah 30+ detik).")
-                midway_notified = True
-            
-            time.sleep(1)
-            
-        else:
-            raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
-
-        # Finalisasi File
-        final_files_list = [
-            f for f in os.listdir(self.temp_download_dir) 
-            if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f
-        ]
-
-        if final_files_list:
-            latest_file_path = max([os.path.join(self.temp_download_dir, f) for f in final_files_list], key=os.path.getctime)
-            downloaded_filename = os.path.basename(latest_file_path)
-            shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
-            
+        # 3. PANGGIL ARIA2C
+        self._edit_telegram_message(f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
+        downloaded_filename = self._download_file_with_aria2c([final_download_url], file_name)
+        
+        if downloaded_filename:
             self._edit_telegram_message(f"✅ **[Apk Admin Mode] Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
             return downloaded_filename
         else:
-            raise FileNotFoundError("Gagal menemukan file yang diunduh.")
-
+            raise Exception("Aria2c gagal mengunduh file.")
     # =========================================================
     # --- 4. MAIN ORCHESTRATOR (run) ---
     # =========================================================
