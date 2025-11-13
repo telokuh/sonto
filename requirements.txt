@@ -2,8 +2,8 @@ pyrogram
 TgCrypto
 python-dotenv
 requests
-webdriver-manager
-selenium
+undetected-chromedriver
+selenium-stealth
 yt-dlp
 PyDrive
 google-api-python-client
