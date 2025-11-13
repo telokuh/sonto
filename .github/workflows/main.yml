@@ -111,17 +111,6 @@ jobs:
         run: |
           echo "$YOUTUBE_COOKIES_SECRET" > cookies.txt
 
-      # ----------------------------------------------------
-      # ✅ REVISI: RESTORE Playwright Browsers Cache
-      # ----------------------------------------------------
-      - name: Restore Playwright Cache
-        id: restore-playwright
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-bin-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-bin-
 
       - name: Restore Venv Cache
         id: restore-venv
@@ -132,7 +121,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-venv-
 
-      - name: dependency pip & Playwright Install
+      - name: dependency pip 
         run: |
           # 1. Setup Venv
           python -m venv .venv
@@ -147,11 +136,6 @@ jobs:
             echo "Venv cache hit. Skipping pip install."
           fi
           
-          # 3. Instalasi Playwright Browsers (Selalu dijalankan)
-          # Ini akan menggunakan cache di ~/.cache/ms-playwright atau mengunduh jika miss.
-          echo "Installing/Verifying Playwright browsers..."
-          python -m playwright install --with-deps
-
 # -----------------------------------------------------------------------------
 # --- DOWNLOAD & UNGGAH ---
 # -----------------------------------------------------------------------------
@@ -202,12 +186,6 @@ jobs:
           path: .venv
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
 
-      - name: Save Playwright Cache (Always)
-        uses: actions/cache/save@v4
-        if: always() && steps.restore-playwright.outputs.cache-hit != 'true'
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-bin-${{ hashFiles('requirements.txt') }}
 
       - name: Clean up apt cache
         run: |
