@@ -527,11 +527,6 @@ class DownloaderBot:
         
         html_content = driver.page_source
         
-        # Potong HTML agar console tidak terlalu penuh (hanya 2000 karakter pertama)
-        if len(html_content) > 2000:
-            html_snippet = html_content[:2000] + "\n\n...[HTML DIPOTONG KARENA TERLALU PANJANG]..."
-        else:
-            html_snippet = html_content
             
         print("\n--- RESPONS HTML DARI SUBMIT FORM F1 ---")
         print(html_snippet)
