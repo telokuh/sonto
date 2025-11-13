@@ -5,9 +5,11 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
+#from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-import undetected_chromedriver as uc # PENTING!
+#import undetected_chromedriver as uc # PENTING!
+from webdriver_manager.chrome import ChromeDriverManager # <-- Diperlukan lagi
+from selenium_stealth import stealth
 import time
 import json
 import re
@@ -259,10 +261,9 @@ class DownloaderBot:
     def _initialize_selenium_driver(self):
         """
         Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless) 
-        menggunakan undetected_chromedriver (uc) untuk menghindari deteksi bot.
+        menggunakan selenium-stealth untuk menghindari deteksi bot.
         Mengaktifkan Performance Logging untuk CDP Network Events.
         """
-        import undetected_chromedriver as uc
         
         chrome_prefs = {
             "download.default_directory": self.temp_download_dir,
@@ -271,37 +272,40 @@ class DownloaderBot:
             "safebrowsing.enabled": True,
         }
         
-        options = uc.ChromeOptions()
+        options = webdriver.ChromeOptions()
         
         # Tambahkan preferensi untuk download
         options.add_experimental_option("prefs", chrome_prefs)
         
-        # PENTING: undetectable-chromedriver seringkali berfungsi lebih baik TANPA --headless
-        # Namun, kita akan menyertakannya sebagai opsi, tapi disarankan untuk uji coba tanpa ini.
-        options.add_argument('--headless=new') # Menggunakan mode headless baru (lebih stealth)
-        
+        # Opsi Headless dan anti-sandbox
+        options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--start-maximized') # Argumen stealth tambahan
-        
-        # AKTIFKAN PERFORMANCE LOGGING (CDP) - Kompatibel dengan uc
-        options.add_argument('--enable-logging')
-        options.add_argument('--v=1')
+        options.add_argument('--disable-blink-features=AutomationControlled') # Tambahan stealth
+
+        # AKTIFKAN PERFORMANCE LOGGING (CDP)
         options.set_capability('goog:loggingPrefs', {'performance': 'ALL'}) 
         
         try:
-            # uc.Chrome secara otomatis mengunduh chromedriver yang anti-deteksi jika diperlukan
-            # dan menerapkan opsi stealth internal.
-            self.driver = uc.Chrome(options=options,
-                                    use_subprocess=True,
-                                    headless=True) # Tambahkan argumen headless langsung ke inisialisasi
+            # 1. Inisialisasi Driver Standar
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=options)
             
-            # Set timeout setelah inisialisasi driver
+            # 2. Terapkan Lapisan Stealth (PENTING!)
+            stealth(self.driver,
+                    languages=["en-US", "en"],
+                    vendor="Google Inc.",
+                    platform="Win32",
+                    webgl_vendor="Intel Inc.",
+                    renderer="Intel Iris OpenGL Engine",
+                    fix_hairline=True,
+                    )
+            
             self.driver.set_page_load_timeout(60) 
             
             return True
         except Exception as e:
-            print(f"❌ Gagal inisialisasi Selenium Driver dengan uc: {e}")
+            print(f"❌ Gagal inisialisasi Selenium Driver: {e}")
             return False
     def _process_selenium_download(self):
         """
