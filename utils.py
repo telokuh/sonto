@@ -498,7 +498,7 @@ class DownloaderBot:
         langsung dari log jaringan (CDP Network Logging) dengan memprioritaskan 
         URL yang berakhiran .apk atau .zip.
         
-        ⚠️ DEBUG: Mencetak SEMUA URL respons ke konsol.
+        ⚠️ DEBUG: Mencetak respons HTML halaman kedua ke konsol.
         """
         driver = self.driver
         driver.get(self.url)
@@ -515,11 +515,29 @@ class DownloaderBot:
         except TimeoutException:
             raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
-        # --- 2. EKSTRAKSI URL DARI NETWORK LOGS ---
-        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Menganalisis log jaringan (simulasi DevTools), mencari .apk/.zip...")
+        # --- LANGKAH DEBUG: PRINT RESPONS HTML KE CONSOLE ---
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Halaman kedua dimuat. Mencetak respons HTML ke konsol...")
         
-        # Beri waktu driver untuk menyelesaikan semua permintaan jaringan setelah submit
-        time.sleep(7) 
+        # Beri waktu driver untuk memuat halaman baru
+        time.sleep(5) 
+        
+        html_content = driver.page_source
+        
+        # Potong HTML agar console tidak terlalu penuh (hanya 2000 karakter pertama)
+        if len(html_content) > 2000:
+            html_snippet = html_content[:2000] + "\n\n...[HTML DIPOTONG KARENA TERLALU PANJANG]..."
+        else:
+            html_snippet = html_content
+            
+        print("\n--- RESPONS HTML DARI SUBMIT FORM F1 ---")
+        print(html_snippet)
+        print("--- AKHIR RESPONS HTML ---")
+        
+        # --- 2. EKSTRAKSI URL DARI NETWORK LOGS (Logika dipertahankan, print log dihapus) ---
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Menganalisis log jaringan (CDP), mencari .apk/.zip...")
+        
+        # Beri waktu tambahan untuk menyelesaikan permintaan jaringan
+        time.sleep(2) 
         
         final_download_url = None
         
@@ -529,8 +547,6 @@ class DownloaderBot:
             
             # Regex untuk mencari URL yang mengandung ekstensi .apk atau .zip
             FILE_EXTENSION_REGEX = re.compile(r'\.(apk|zip)$', re.I)
-            
-            print("\n--- LOG JARINGAN PENUH (SEMUA URL RESPON) ---")
             
             # Memproses dan memfilter log
             for entry in logs:
@@ -543,14 +559,11 @@ class DownloaderBot:
                     url = response.get('url')
                     status = response.get('status')
                     
-                    # ✅ PRINT SEMUA URL RESPON KE CONSOLE (Sesuai permintaan Anda)
-                    print(f"[STATUS: {status}] {url}")
-                    
-                    # Logika filtering yang sebenarnya untuk menemukan file download
+                    # Logika filtering yang sebenarnya
                     is_download_candidate = (
                         status == 200 and
-                        "apkadmin" not in url and # Abaikan URL internal Apk Admin
-                        FILE_EXTENSION_REGEX.search(url) # Mencocokkan ekstensi yang diminta
+                        "apkadmin" not in url and 
+                        FILE_EXTENSION_REGEX.search(url)
                     )
                     
                     if is_download_candidate:
@@ -562,8 +575,6 @@ class DownloaderBot:
                             'size': size
                         })
             
-            print("--- AKHIR LOG JARINGAN ---")
-                        
             # Urutkan berdasarkan ukuran file terbesar
             if network_requests:
                 network_requests.sort(key=lambda x: x['size'], reverse=True)
