@@ -491,7 +491,7 @@ class DownloaderBot:
         
         return downloaded_filename
 
-def _process_apkadmin_download(self):
+    def _process_apkadmin_download(self):
         """
         Menangani proses dua kali klik tombol download (seperti pada Apk Admin),
         mengekstraksi URL final dari tombol di halaman kedua, lalu memanggil aria2c.
