@@ -490,12 +490,13 @@ class DownloaderBot:
             self._edit_telegram_message(f"✅ **SourceForge: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
         
         return downloaded_filename
+        
 
     def _process_apkadmin_download(self):
         """
         Menangani proses dua kali klik tombol download (seperti pada Apk Admin),
         mengekstrak URL final dari tombol di halaman kedua, lalu memanggil aria2c.
-        Termasuk langkah debug untuk mengirim HTML #container setelah submit.
+        Termasuk langkah debug untuk mengirimkan FULL PAGE SOURCE setelah submit.
         """
         driver = self.driver
         driver.get(self.url)
@@ -512,39 +513,41 @@ class DownloaderBot:
         except TimeoutException:
             raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
-        # --- LANGKAH DEBUG: KIRIM HTML OUTER DARI #container ---
-        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Halaman kedua dimuat. Mengekstrak HTML untuk debug...")
+        # --- LANGKAH DEBUG: KIRIM SELURUH PAGE SOURCE ---
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Halaman kedua dimuat. Mengekstrak *FULL PAGE SOURCE* untuk debug...")
+        
+        # Beri waktu driver (browser) untuk memuat konten halaman baru
+        time.sleep(5) 
         
         try:
-            # Tunggu elemen #container muncul di halaman baru
-            container_element = WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#container"))
-            )
-            html_content = container_element.get_attribute('outerHTML')
+            # Ambil seluruh HTML halaman yang dimuat
+            html_content = driver.page_source
             
-            # Potong HTML agar sesuai dengan batas Telegram (4096 karakter, gunakan 3500 sebagai batas aman)
+            # Potong HTML agar sesuai dengan batas Telegram (~4096 karakter)
             if len(html_content) > 3500:
-                html_snippet = html_content[:3500] + "\n\n...[DIPOTONG KARENA TERLALU PANJANG]..."
+                html_snippet = html_content[:3500] + "\n\n...[FULL PAGE SOURCE DIPOTONG KARENA TERLALU PANJANG]..."
             else:
                 html_snippet = html_content
                 
             # Kirim HTML sebagai pesan baru (menggunakan self._send_telegram_message)
-            debug_message = f"**[APK Admin Debug: #container HTML]**\n```html\n{html_snippet}\n```"
+            debug_message = f"**[APK Admin Debug: FULL PAGE SOURCE]**\n```html\n{html_snippet}\n```"
             self._send_telegram_message(debug_message)
             
-        except TimeoutException:
-            print("Peringatan: Elemen #container tidak ditemukan setelah submit. Melanjutkan proses.")
-            # Melanjutkan proses meskipun debug gagal
+            print("FULL PAGE SOURCE dikirim ke Telegram untuk dianalisis.")
+            
+        except Exception as e:
+            print(f"Peringatan: Gagal mendapatkan Page Source setelah submit: {e}. Melanjutkan proses.")
             pass
         
         # 2. EKSTRAKSI URL LANGSUNG DARI TOMBOL DOWNLOAD DI HALAMAN KEDUA
+        # Selektor ini kemungkinan besar TIDAK TEPAT jika #container hilang. 
+        # Cek Page Source di Telegram untuk mencari selektor yang benar.
         SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
         
         self._edit_telegram_message("🔍 **[Apk Admin Mode]** Melanjutkan ekstraksi URL Download Langsung...")
         
         try:
-            # Tunggu tombol step 2 muncul
-            # Waktu tunggu dikurangi karena kita sudah menunggu #container sebelumnya
+            # Tunggu tombol step 2 muncul (maksimal 10 detik)
             download_button = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_STEP_2))
             )
@@ -555,11 +558,11 @@ class DownloaderBot:
             if not final_download_url:
                 raise Exception("Atribut 'href' pada tombol download Step 2 kosong.")
 
-            # Dapatkan nama file yang benar dari header HTTP (lebih akurat)
+            # Dapatkan nama file yang benar dari header HTTP
             file_name = self._extract_filename_from_url_or_header(final_download_url)
             
         except TimeoutException:
-            raise TimeoutException("Gagal menemukan elemen tombol download Step 2 (SELECTOR_STEP_2).")
+            raise TimeoutException(f"Gagal menemukan elemen tombol download Step 2 ('{SELECTOR_STEP_2}'). Silakan periksa FULL PAGE SOURCE di Telegram untuk menemukan selektor yang benar.")
         except Exception as e:
             raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
         
