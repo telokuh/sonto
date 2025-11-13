@@ -529,7 +529,7 @@ class DownloaderBot:
         
             
         print("\n--- RESPONS HTML DARI SUBMIT FORM F1 ---")
-        print(html_snippet)
+        print(html_content)
         print("--- AKHIR RESPONS HTML ---")
         
         # --- 2. EKSTRAKSI URL DARI NETWORK LOGS (Logika dipertahankan, print log dihapus) ---
