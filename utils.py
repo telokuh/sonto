@@ -33,7 +33,7 @@ class DownloaderBot:
         self.url = url
         self.bot_token = os.environ.get("BOT_TOKEN")
         self.owner_id = os.environ.get("PAYLOAD_SENDER")
-        # Tentukan directory untuk download sementara (hanya untuk Selenium)
+        # Tentukan directory untuk download sementara
         self.temp_download_dir = tempfile.mkdtemp()
         self.initial_message_id = None
         self.driver = None
@@ -82,7 +82,7 @@ class DownloaderBot:
         try:
             requests.post(url, json=payload, timeout=10)
         except Exception as e:
-            pass # Pesan sudah terlalu lama atau tidak bisa diubah
+            pass 
 
     def _get_total_file_size_safe(self, url):
         """Mendapatkan ukuran file total dari URL dengan aman."""
@@ -93,15 +93,40 @@ class DownloaderBot:
             if content_length: return int(content_length)
         except requests.exceptions.RequestException:
             pass 
-        
         try:
             with requests.get(url, stream=True, timeout=30) as r:
                 r.raise_for_status()
                 if 'Content-Length' in r.headers:
                     return int(r.headers['Content-Length'])
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Gagal mendapatkan ukuran file: {e}")
+        except requests.exceptions.RequestException:
+            pass
         return None
+
+    def _extract_filename_from_url_or_header(self, download_url):
+        """Mendapatkan nama file dari header Content-Disposition atau fallback ke path URL."""
+        file_name = None
+        try:
+            head_response = requests.head(download_url, allow_redirects=True, timeout=10)
+            head_response.raise_for_status()
+            
+            cd_header = head_response.headers.get('Content-Disposition')
+            if cd_header:
+                # Mencari filename* atau filename sederhana
+                fname_match = re.search(r'filename\*?=["\']?(?:utf-8\'\')?([^"\';]+)["\']?', cd_header, re.I)
+                if fname_match:
+                    file_name = fname_match.group(1).strip()
+                    file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
+            
+            if not file_name:
+                url_path = urlparse(download_url).path
+                file_name = url_path.split('/')[-1]
+            
+        except requests.exceptions.RequestException:
+            url_path = urlparse(download_url).path
+            file_name = url_path.split('/')[-1]
+            
+        return file_name if file_name else "unknown_file"
+
 
     # =========================================================
     # --- 2. METODE DOWNLOAD INTI (ARIA2C & MEGATOOLS) ---
@@ -117,12 +142,9 @@ class DownloaderBot:
         
         process = None
         try:
-            # Panggil self._send_telegram_message, bukan send_telegram_message
             self._send_telegram_message(f"⬇️ Download dimulai: `{output_filename}`")
-            
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             
-            # Mendapatkan ukuran file dan menulis URL
             for url in urls:
                 total_size = self._get_total_file_size_safe(url)
                 if total_size is not None:
@@ -137,7 +159,6 @@ class DownloaderBot:
             while time.time() - start_time < timeout:
                 if os.path.exists(output_filename):
                     current_size = os.path.getsize(output_filename)
-                    
                     if total_size is not None and total_size > 0:
                         percent_now = int(current_size * 100 // total_size)
                         
@@ -149,7 +170,6 @@ class DownloaderBot:
                             last_notified_percent = percent_now
                             
                     if (total_size is not None and current_size >= total_size):
-                        print(f"File {output_filename} selesai. Menghentikan aria2c...")
                         if process.poll() is None:
                             process.terminate()
                             time.sleep(2)
@@ -163,19 +183,16 @@ class DownloaderBot:
                         self._edit_telegram_message(f"✅ Download Selesai. `{output_filename}` ({self._human_readable_size(total_size)})")
                         return output_filename
                     
-                    print("Aria2c berhenti sebelum file selesai diunduh. Mungkin terjadi kesalahan.")
                     return None
                     
                 time.sleep(3)
             
-            print("Waktu habis. Menghentikan aria2c.")
             if process and process.poll() is None:
                 process.terminate()
                 time.sleep(1)
                 process.kill()
                 
         except Exception as e:
-            print(f"Terjadi kesalahan saat menjalankan aria2c: {e}")
             if process and process.poll() is None:
                 process.terminate()
                 time.sleep(1)
@@ -208,10 +225,7 @@ class DownloaderBot:
                     current_size_str = match.group(2)
                     current_unit = match.group(3)
                     
-                    should_update_50 = (percent_now >= 50 and last_notified_percent < 50)
-                    should_update_100 = (percent_now == 100)
-                    
-                    if should_update_50 or should_update_100:
+                    if percent_now >= 50 and last_notified_percent < 50 or percent_now == 100:
                         last_notified_percent = percent_now
                         progress_message = f"⬇️ **Mulai mengunduh...**\nUkuran file: `{current_size_str} {current_unit}`\n\nProgres: `{percent_now}%`"
                         self._edit_telegram_message(progress_message)
@@ -229,10 +243,8 @@ class DownloaderBot:
                 self._edit_telegram_message(f"✅ **MEGA: Unduhan selesai!**\nFile: `{filename}`\n\n**➡️ Mulai UPLOADING...**")
                 return filename
             else:
-                print(f"Gagal menemukan file yang baru diunduh. Jumlah file: {len(downloaded_files)}")
                 return None
         except Exception as e:
-            print(f"megatools gagal: {e}")
             self._edit_telegram_message(f"❌ **`megatools` gagal mengunduh file.**\n\nDetail: {str(e)[:200]}...")
             return None
         finally:
@@ -246,7 +258,10 @@ class DownloaderBot:
     # =========================================================
 
     def _initialize_selenium_driver(self):
-        """Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless) dan menyimpannya ke self.driver."""
+        """
+        Menginisialisasi dan mengkonfigurasi Chrome Driver (Headless).
+        Mengaktifkan Performance Logging untuk CDP Network Events.
+        """
         chrome_prefs = {
             "download.default_directory": self.temp_download_dir,
             "download.prompt_for_download": False,
@@ -260,6 +275,9 @@ class DownloaderBot:
         options.add_argument('--disable-dev-shm-usage')
         options.add_experimental_option("mobileEmulation", {"deviceName": "Nexus 5"})
         
+        # AKTIFKAN PERFORMANCE LOGGING
+        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'}) 
+        
         try:
             service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=options)
@@ -268,39 +286,10 @@ class DownloaderBot:
             print(f"❌ Gagal inisialisasi Selenium Driver: {e}")
             return False
 
-    def _extract_filename_from_url_or_header(self, download_url):
-        """Mendapatkan nama file dari header Content-Disposition atau fallback ke path URL."""
-        file_name = None
-        try:
-            head_response = requests.head(download_url, allow_redirects=True, timeout=10)
-            head_response.raise_for_status()
-            
-            cd_header = head_response.headers.get('Content-Disposition')
-            if cd_header:
-                fname_match = re.search(r'filename\*?=["\']?(?:utf-8\'\')?([^"\';]+)["\']?', cd_header, re.I)
-                if fname_match:
-                    file_name = fname_match.group(1).strip()
-                    file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-                else:
-                    fname_match_simple = re.search(r'filename=["\']?([^"\';]+)["\']?', cd_header, re.I)
-                    if fname_match_simple:
-                         file_name = fname_match_simple.group(1).strip()
-                         file_name = re.sub(r'[^\x00-\x7F]+', '', file_name)
-
-            if not file_name:
-                url_path = urlparse(download_url).path
-                file_name = url_path.split('/')[-1]
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Peringatan: Gagal mendapatkan header file dari URL. Fallback ke nama dari path URL. Detail: {e}")
-            url_path = urlparse(download_url).path
-            file_name = url_path.split('/')[-1]
-            
-        return file_name if file_name else "unknown_file"
-
     def _process_selenium_download(self):
         """
-        Menangani Gofile, Mediafire, dan AGGRESIVE CLICKING untuk URL tidak dikenal.
+        Menangani Gofile, Mediafire, dan AGGRESIVE CLICKING.
+        (Logika MediaFire, Gofile, dan Aggressive Clicking)
         """
         driver = self.driver
         url = self.url
@@ -309,9 +298,7 @@ class DownloaderBot:
         driver.get(url)
         self._edit_telegram_message(f"⬇️ **[Mode Download]** Menganalisis situs...")
 
-        # ====================================================================
-        # --- LOGIKA KHUSUS MEDIAFIRE: FORM SUBMIT + EKSTRAKSI LINK ---
-        # ====================================================================
+        # --- LOGIKA KHUSUS MEDIAFIRE ---
         if "mediafire" in url:
             FORM_SELECTOR_STEP_1 = "form.dl-btn-form" 
             SELECTOR_STEP_2 = "#downloadButton"
@@ -341,19 +328,14 @@ class DownloaderBot:
                 
                 if downloaded_filename:
                     self._edit_telegram_message(f"✅ **MediaFire: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
+                    return downloaded_filename
                 else:
                     raise Exception("Aria2c gagal mengunduh file.")
-                    
-                return downloaded_filename
-            except TimeoutException:
-                raise TimeoutException(f"Gagal menemukan tombol download final MediaFire ('{SELECTOR_STEP_2}').")
             except Exception as e:
                 raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
-
-        # ====================================================================
+            
         # --- LOGIKA GOFILE ATAU LOGIKA AGGRESIF UMUM ---
-        # ====================================================================
-        
+        # (Implementasi logika agresif di sini, untuk situs yang tidak spesifik)
         action_performed = False
         
         if "gofile" in url:
@@ -370,7 +352,7 @@ class DownloaderBot:
                 print(f"Peringatan: Gagal menemukan tombol Gofile. Mencoba mode Agresif.")
                 pass
         
-        # Mode Agresif / Fallback
+        # Mode Agresif / Fallback (Monitoring folder download oleh Selenium)
         if not action_performed and "mediafire" not in url:
             self._edit_telegram_message(f"⬇️ **[Mode Agresif]** Mencari dan mengklik tombol download...")
             
@@ -392,57 +374,55 @@ class DownloaderBot:
                     break
                 except TimeoutException:
                     continue
-
+        
         # 4. Monitoring Download (Logika Monitoring Ketat)
-        start_time = time.time()
-        timeout = 300
-        midway_notified = False
-        initial_files = set(os.listdir(self.temp_download_dir))
-        
-        while time.time() - start_time < timeout:
-            current_files = os.listdir(self.temp_download_dir)
+        if action_performed:
+            start_time = time.time()
+            timeout = 300
+            initial_files = set(os.listdir(self.temp_download_dir))
             
-            is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or "Unconfirmed" in fname for fname in current_files)
-            
+            while time.time() - start_time < timeout:
+                current_files = os.listdir(self.temp_download_dir)
+                
+                is_downloading = any(fname.endswith(('.crdownload', '.tmp')) or "Unconfirmed" in fname for fname in current_files)
+                
+                final_files_list = [
+                    f for f in current_files 
+                    if not f.endswith(('.crdownload', '.tmp')) and 
+                       not f.startswith('.') and 
+                       "Unconfirmed" not in f and 
+                       f not in initial_files
+                ]
+
+                if not is_downloading and final_files_list:
+                    break
+                
+                time.sleep(1)
+                
+            else:
+                raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
+
+            # 5. Finalisasi File
             final_files_list = [
-                f for f in current_files 
-                if not f.endswith(('.crdownload', '.tmp')) and 
-                   not f.startswith('.') and 
-                   "Unconfirmed" not in f and 
-                   f not in initial_files
+                f for f in os.listdir(self.temp_download_dir) 
+                if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f
             ]
-
-            if not is_downloading and final_files_list:
-                break
             
-            elapsed_time = time.time() - start_time
-            if elapsed_time > 30 and not midway_notified and is_downloading:
-                self._edit_telegram_message("⬇️ **Masih mengunduh...**\nStatus: Proses unduhan berjalan (sudah 30+ detik).")
-                midway_notified = True
-            
-            time.sleep(1)
-            
-        else:
-            raise TimeoutException("Unduhan gagal atau melebihi batas waktu 300 detik.")
-
-        # 5. Finalisasi File
-        final_files_list = [
-            f for f in os.listdir(self.temp_download_dir) 
-            if not f.endswith(('.crdownload', '.tmp')) and not f.startswith('.') and "Unconfirmed" not in f
-        ]
+            if final_files_list:
+                latest_file_path = max([os.path.join(self.temp_download_dir, f) for f in final_files_list], key=os.path.getctime)
+                downloaded_filename = os.path.basename(latest_file_path)
+                
+                shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
+                
+                file_size = os.path.getsize(downloaded_filename)
+                self._edit_telegram_message(f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}` ({self._human_readable_size(file_size)})\n\n**➡️ Mulai UPLOADING...**")
+                
+                return downloaded_filename
+            else:
+                raise FileNotFoundError("Gagal menemukan file yang diunduh setelah monitoring.")
         
-        if final_files_list:
-            latest_file_path = max([os.path.join(self.temp_download_dir, f) for f in final_files_list], key=os.path.getctime)
-            downloaded_filename = os.path.basename(latest_file_path)
-            
-            shutil.move(latest_file_path, os.path.join(os.getcwd(), downloaded_filename))
-            
-            file_size = os.path.getsize(downloaded_filename)
-            self._edit_telegram_message(f"✅ **Unduhan selesai!**\nFile: `{downloaded_filename}` ({self._human_readable_size(file_size)})\n\n**➡️ Mulai UPLOADING...**")
-            
-            return downloaded_filename
-        else:
-            raise FileNotFoundError("Gagal menemukan file yang diunduh setelah monitoring.")
+        return downloaded_filename
+
 
     def _process_sourceforge_download(self):
         """Menangani SourceForge: Mendapatkan mirror URL dan memanggil aria2c."""
@@ -464,15 +444,9 @@ class DownloaderBot:
             new_query = urlencode(query_params, doseq=True)
             return urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, parsed_url.params, new_query, parsed_url.fragment))
         
-        mirror_url = source_url(self.url)
-        self.driver.get(mirror_url)
-        
-        list_items = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul#mirrorList > li"))
-        )
-        li_id = [item.get_attribute("id") for item in list_items]
-        
         self.driver.get(self.url)
+        
+        # Ekstraksi nama file dan link tombol pertama
         download_button = WebDriverWait(self.driver, 20).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "#remaining-buttons > div.large-12 > a.button.green"))
         )
@@ -480,6 +454,15 @@ class DownloaderBot:
             EC.visibility_of_element_located((By.CSS_SELECTOR, "#downloading > div.content > div.file-info > div"))
         ).text
         ahref = download_button.get_attribute('href')
+        
+        # Navigasi ke halaman mirror
+        mirror_url = source_url(self.url)
+        self.driver.get(mirror_url)
+        
+        list_items = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul#mirrorList > li"))
+        )
+        li_id = [item.get_attribute("id") for item in list_items]
         
         download_urls = [set_url(ahref, 'use_mirror', mirror_id) for mirror_id in li_id]
         
@@ -490,13 +473,11 @@ class DownloaderBot:
             self._edit_telegram_message(f"✅ **SourceForge: Unduhan selesai!**\nFile: `{downloaded_filename}`\n\n**➡️ Mulai UPLOADING...**")
         
         return downloaded_filename
-        
 
     def _process_apkadmin_download(self):
         """
-        Menangani proses dua kali klik tombol download (seperti pada Apk Admin),
-        mengekstrak URL final dari tombol di halaman kedua, lalu memanggil aria2c.
-        Termasuk langkah debug untuk mengirimkan FULL PAGE SOURCE setelah submit.
+        Menangani proses Apk Admin: submit form dan mengekstrak URL download 
+        langsung dari log jaringan (CDP Network Logging).
         """
         driver = self.driver
         driver.get(self.url)
@@ -504,8 +485,8 @@ class DownloaderBot:
         SELECTOR_FORM = "form[name='F1']"
         self._edit_telegram_message("⬇️ **[Apk Admin Mode]** Mencari dan mengirimkan FORM Step 1...")
         
+        # 1. KLIK/SUBMIT FORM PERTAMA
         try:
-            # 1. KLIK/SUBMIT FORM PERTAMA (Pindah ke halaman kedua)
             form_element = WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_FORM))
             )
@@ -513,60 +494,64 @@ class DownloaderBot:
         except TimeoutException:
             raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
-        # --- LANGKAH DEBUG: KIRIM SELURUH PAGE SOURCE ---
-        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Halaman kedua dimuat. Mengekstrak *FULL PAGE SOURCE* untuk debug...")
+        # --- 2. EKSTRAKSI URL DARI NETWORK LOGS ---
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Menganalisis log jaringan (simulasi DevTools)...")
         
-        # Beri waktu driver (browser) untuk memuat konten halaman baru
-        time.sleep(5) 
+        # Beri waktu driver untuk menyelesaikan semua permintaan jaringan setelah submit
+        time.sleep(7) 
+        
+        final_download_url = None
         
         try:
-            # Ambil seluruh HTML halaman yang dimuat
-            html_content = driver.page_source
+            # Ambil log performance
+            logs = driver.get_log('performance')
+            network_requests = []
             
-            # Potong HTML agar sesuai dengan batas Telegram (~4096 karakter)
-            if len(html_content) > 3500:
-                html_snippet = html_content[:3500] + "\n\n...[FULL PAGE SOURCE DIPOTONG KARENA TERLALU PANJANG]..."
-            else:
-                html_snippet = html_content
+            # Memproses dan memfilter log
+            for entry in logs:
+                log_json = json.loads(entry['message'])
+                message = log_json.get('message')
                 
-            # Kirim HTML sebagai pesan baru (menggunakan self._send_telegram_message)
-            debug_message = f"**[APK Admin Debug: FULL PAGE SOURCE]**\n```html\n{html_snippet}\n```"
-            self._send_telegram_message(debug_message)
-            
-            print("FULL PAGE SOURCE dikirim ke Telegram untuk dianalisis.")
-            
-        except Exception as e:
-            print(f"Peringatan: Gagal mendapatkan Page Source setelah submit: {e}. Melanjutkan proses.")
-            pass
-        
-        # 2. EKSTRAKSI URL LANGSUNG DARI TOMBOL DOWNLOAD DI HALAMAN KEDUA
-        # Selektor ini kemungkinan besar TIDAK TEPAT jika #container hilang. 
-        # Cek Page Source di Telegram untuk mencari selektor yang benar.
-        SELECTOR_STEP_2 = "#container > div.download-file.step-2 > div.a-spot.text-align-center > div > a"
-        
-        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Melanjutkan ekstraksi URL Download Langsung...")
-        
-        try:
-            # Tunggu tombol step 2 muncul (maksimal 10 detik)
-            download_button = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, SELECTOR_STEP_2))
-            )
-            
-            # Ambil atribut 'href' yang berisi URL download langsung
-            final_download_url = download_button.get_attribute('href')
-            
-            if not final_download_url:
-                raise Exception("Atribut 'href' pada tombol download Step 2 kosong.")
+                if message and message.get('method') == 'Network.responseReceived':
+                    params = message.get('params')
+                    response = params.get('response')
+                    url = response.get('url')
+                    mime_type = response.get('mimeType')
+                    status = response.get('status')
+                    
+                    # Kriteria filter untuk link download biner (Status 200, bukan HTML, dan bukan internal situs)
+                    is_download_candidate = (
+                        status == 200 and
+                        "apkadmin" not in url and
+                        mime_type != 'text/html' and
+                        (mime_type.startswith('application/') or re.search(r'\.(apk|zip|rar|tar\.gz|exe|bin)$', url, re.I))
+                    )
+                    
+                    if is_download_candidate:
+                        content_length = response.get('headers', {}).get('Content-Length')
+                        size = int(content_length) if content_length else 0
+                        
+                        network_requests.append({
+                            'url': url,
+                            'size': size
+                        })
+                        
+            # Urutkan berdasarkan ukuran file terbesar
+            if network_requests:
+                network_requests.sort(key=lambda x: x['size'], reverse=True)
+                final_download_url = network_requests[0]['url']
+                
+                self._edit_telegram_message(f"🔍 **[Apk Admin Mode]** Ditemukan URL download dari log jaringan:\n`{final_download_url}`")
 
-            # Dapatkan nama file yang benar dari header HTTP
-            file_name = self._extract_filename_from_url_or_header(final_download_url)
-            
-        except TimeoutException:
-            raise TimeoutException(f"Gagal menemukan elemen tombol download Step 2 ('{SELECTOR_STEP_2}'). Silakan periksa FULL PAGE SOURCE di Telegram untuk menemukan selektor yang benar.")
+            else:
+                raise FileNotFoundError("Tidak ada URL download biner yang terdeteksi di log jaringan.")
+
         except Exception as e:
-            raise Exception(f"Gagal saat ekstraksi link atau pemanggilan Aria2c: {e}")
+            raise Exception(f"Gagal saat ekstraksi link dari Network Log: {e}")
         
         # 3. PANGGIL ARIA2C
+        file_name = self._extract_filename_from_url_or_header(final_download_url)
+        
         self._edit_telegram_message(f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{file_name}`")
         downloaded_filename = self._download_file_with_aria2c([final_download_url], file_name)
         
@@ -575,6 +560,7 @@ class DownloaderBot:
             return downloaded_filename
         else:
             raise Exception("Aria2c gagal mengunduh file.")
+
     # =========================================================
     # --- 4. MAIN ORCHESTRATOR (run) ---
     # =========================================================
@@ -590,7 +576,6 @@ class DownloaderBot:
                 downloaded_filename = self._download_file_with_megatools(self.url)
             
             elif "pixeldrain" in self.url:
-                print("Mode: Pixeldrain (Ambil Info File)")
                 file_id_match = re.search(r'pixeldrain\.com/(u|l|f)/([a-zA-Z0-9]+)', self.url)
                 if not file_id_match: raise ValueError("URL Pixeldrain tidak valid.")
                 file_id = file_id_match.group(2)
@@ -602,11 +587,7 @@ class DownloaderBot:
                 info_resp.raise_for_status()
                 file_info = info_resp.json()
 
-                if file_info.get('success') and file_info.get('name'):
-                    filename = file_info['name']
-                else:
-                    filename = f"pixeldrain_download_{file_id}"
-                
+                filename = file_info.get('name', f"pixeldrain_download_{file_id}")
                 download_url = f"https://pixeldrain.com/api/file/{file_id}?download"
                 
                 self._edit_telegram_message(f"⬇️ **Memulai unduhan dengan `aria2c`...**\nFile: `{filename}`")
