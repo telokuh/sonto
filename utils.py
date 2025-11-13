@@ -477,7 +477,8 @@ class DownloaderBot:
     def _process_apkadmin_download(self):
         """
         Menangani proses Apk Admin: submit form dan mengekstrak URL download 
-        langsung dari log jaringan (CDP Network Logging).
+        langsung dari log jaringan (CDP Network Logging) dengan memprioritaskan 
+        URL yang berakhiran .apk atau .zip.
         """
         driver = self.driver
         driver.get(self.url)
@@ -495,7 +496,7 @@ class DownloaderBot:
             raise TimeoutException(f"Gagal menemukan FORM '{SELECTOR_FORM}'.")
 
         # --- 2. EKSTRAKSI URL DARI NETWORK LOGS ---
-        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Menganalisis log jaringan (simulasi DevTools)...")
+        self._edit_telegram_message("🔍 **[Apk Admin Mode]** Menganalisis log jaringan (simulasi DevTools), mencari .apk/.zip...")
         
         # Beri waktu driver untuk menyelesaikan semua permintaan jaringan setelah submit
         time.sleep(7) 
@@ -503,9 +504,11 @@ class DownloaderBot:
         final_download_url = None
         
         try:
-            # Ambil log performance
             logs = driver.get_log('performance')
             network_requests = []
+            
+            # Regex untuk mencari URL yang mengandung ekstensi .apk atau .zip
+            FILE_EXTENSION_REGEX = re.compile(r'\.(apk|zip)$', re.I)
             
             # Memproses dan memfilter log
             for entry in logs:
@@ -516,15 +519,12 @@ class DownloaderBot:
                     params = message.get('params')
                     response = params.get('response')
                     url = response.get('url')
-                    mime_type = response.get('mimeType')
                     status = response.get('status')
                     
-                    # Kriteria filter untuk link download biner (Status 200, bukan HTML, dan bukan internal situs)
+                    # Kriteria filter yang direvisi: Cari ekstensi .apk atau .zip
                     is_download_candidate = (
-                        status == 200 and
-                        "apkadmin" not in url and
-                        mime_type != 'text/html' and
-                        (mime_type.startswith('application/') or re.search(r'\.(apk|zip|rar|tar\.gz|exe|bin)$', url, re.I))
+                        status == 200 and 
+                        FILE_EXTENSION_REGEX.search(url) # Mencocokkan ekstensi yang diminta
                     )
                     
                     if is_download_candidate:
@@ -541,10 +541,10 @@ class DownloaderBot:
                 network_requests.sort(key=lambda x: x['size'], reverse=True)
                 final_download_url = network_requests[0]['url']
                 
-                self._edit_telegram_message(f"🔍 **[Apk Admin Mode]** Ditemukan URL download dari log jaringan:\n`{final_download_url}`")
+                self._edit_telegram_message(f"🔍 **[Apk Admin Mode]** Ditemukan URL download (.apk/.zip) dari log jaringan:\n`{final_download_url}`")
 
             else:
-                raise FileNotFoundError("Tidak ada URL download biner yang terdeteksi di log jaringan.")
+                raise FileNotFoundError("Tidak ada URL download (.apk/.zip) yang terdeteksi di log jaringan.")
 
         except Exception as e:
             raise Exception(f"Gagal saat ekstraksi link dari Network Log: {e}")
@@ -560,7 +560,6 @@ class DownloaderBot:
             return downloaded_filename
         else:
             raise Exception("Aria2c gagal mengunduh file.")
-
     # =========================================================
     # --- 4. MAIN ORCHESTRATOR (run) ---
     # =========================================================
