@@ -3,6 +3,7 @@ TgCrypto
 python-dotenv
 requests
 undetected-chromedriver
+setuptools==65.5.0
 selenium-stealth
 yt-dlp
 PyDrive
